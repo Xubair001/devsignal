@@ -7,12 +7,16 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–4 are done.** Repo, CI, local stack, config/logging/tracing skeleton, and
-the canonical schema. Nothing ingests yet.
+**Blueprint §35 steps 2–7 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+schema, identity, the pipeline spine, and the first source adapter. It ingests real postings:
+`make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`.
 
-Next: step 5 (identity) then step 6 (queue + state machine + sweeper). Step 7 (first adapter) is
-gated on the Tier-A source list below. Do not skip ahead because a later step looks easier — the
-order is dependency-ordered, not thematic.
+Next: step 8 (company entity resolution proper, normalization, dedup) then step 9 (liveness
+display) and step 10 (scale to 300–500 boards + source health monitor). Do not skip ahead because a
+later step looks easier — the order is dependency-ordered, not thematic.
+
+Only `greenhouse:gitlab` is registered, as a proof of slice. Adding the rest is gated on the
+Tier-A source list below.
 
 Four decisions are still open and are tracked in blueprint §33.3. Do not code around them:
 

@@ -12,34 +12,43 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
+	"github.com/Xubair001/devsignal/internal/ingest"
 	"github.com/Xubair001/devsignal/internal/pipeline"
+	"github.com/Xubair001/devsignal/internal/source"
+
+	// Importing an adapter family is what enables it.
+	_ "github.com/Xubair001/devsignal/internal/source/greenhouse"
+	"github.com/Xubair001/devsignal/internal/store"
 	"github.com/Xubair001/devsignal/pkg/logger"
 	"github.com/Xubair001/devsignal/pkg/telemetry"
 )
 
 func main() {
-	role := flag.String("role", "api", "api | worker | digest | admin")
+	role := flag.String("role", "api", "api | worker | ingest-once | add-source | digest | admin")
+	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	flag.Parse()
 
-	if err := run(*role); err != nil {
+	if err := run(*role, *srcName); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(role string) error {
+func run(role, srcName string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -83,6 +92,10 @@ func run(role string) error {
 		return serveAPI(ctx, cfg, log, pool)
 	case "worker":
 		return runWorkers(ctx, log, pool)
+	case "add-source":
+		return addSource(ctx, log, pool, srcName)
+	case "ingest-once":
+		return ingestOnce(ctx, log, pool, srcName)
 	case "digest", "admin":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
@@ -244,6 +257,9 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 	sweeper := pipeline.NewSweeper(queue, log)
 	g.Go(func() error { return sweeper.Run(gctx) })
 
+	runner := ingest.NewRunner(pool, sourceClient(), log)
+	g.Go(func() error { return runner.Run(gctx) })
+
 	// Periodic stats: the state distribution IS the pipeline dashboard.
 	g.Go(func() error {
 		t := time.NewTicker(30 * time.Second)
@@ -269,5 +285,63 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 		return fmt.Errorf("workers: %w", err)
 	}
 	log.Info("workers drained cleanly")
+	return nil
+}
+
+// sourceClient is the single polite HTTP client for all outbound source
+// requests: layered timeouts, per-host rate limiting and a hard body cap.
+func sourceClient() *source.Client {
+	return source.NewClient(source.DefaultClientConfig())
+}
+
+// addSource registers a source and its schedule. Tier and legal basis are
+// required by the schema, so an unvetted source cannot be added by accident.
+func addSource(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, name string) error {
+	if name == "" {
+		return fmt.Errorf("--source is required, e.g. --source=greenhouse:gitlab")
+	}
+	family, cfg, ok := strings.Cut(name, ":")
+	if !ok || cfg == "" {
+		return fmt.Errorf("source name must be \"<family>:<config>\", got %q", name)
+	}
+	if _, err := source.Build(family, source.Options{
+		Config: map[string]string{"board_token": cfg}, Client: sourceClient(),
+	}); err != nil {
+		return fmt.Errorf("no usable adapter for %q: %w", name, err)
+	}
+
+	q := store.New(pool)
+	src, err := q.UpsertSource(ctx, store.UpsertSourceParams{
+		Name: name, Tier: "a", Type: family + "_public_board_api",
+		LegalBasis:    "public, documented, unauthenticated board API intended for third-party consumption",
+		PollInterval:  pgtype.Interval{Microseconds: (5 * time.Minute).Microseconds(), Valid: true},
+		EtagSupported: true,
+	})
+	if err != nil {
+		return fmt.Errorf("registering source: %w", err)
+	}
+	if err := q.UpsertSourceSchedule(ctx, store.UpsertSourceScheduleParams{
+		SourceID: src.ID, Cursor: []byte("{}"),
+	}); err != nil {
+		return fmt.Errorf("scheduling source: %w", err)
+	}
+	log.Info("source registered", "name", src.Name, "tier", src.Tier, "id", src.ID.String())
+	return nil
+}
+
+func ingestOnce(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, name string) error {
+	if name == "" {
+		return fmt.Errorf("--source is required")
+	}
+	runner := ingest.NewRunner(pool, sourceClient(), log)
+	res, err := runner.RunOnce(ctx, name)
+	if err != nil {
+		return err
+	}
+	log.Info("ingest complete",
+		"fetched", res.Fetched, "created", res.Created, "updated", res.Updated,
+		"unchanged", res.Unchanged, "skipped", res.Skipped,
+		"closed", res.Closed, "not_modified", res.NotModified,
+		"yield", res.ParseYield())
 	return nil
 }

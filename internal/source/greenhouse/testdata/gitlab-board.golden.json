@@ -1,0 +1,50 @@
+[
+  {
+    "source_job_id": "8503792002",
+    "ats_type": "greenhouse",
+    "ats_job_id": "8503792002",
+    "title": "Account Executive - Italy",
+    "company_name": "GitLab",
+    "apply_url": "https://job-boards.greenhouse.io/gitlab/jobs/8503792002",
+    "language": "en",
+    "location_raw": "Remote, Italy",
+    "work_mode": "remote",
+    "source_reported_posted_at": "2026-04-17T09:58:03Z",
+    "source_updated_at": "2026-08-10T20:52:46Z",
+    "description_len": 9677,
+    "description_head": "\u003cdiv class=\"content-intro\"\u003e\u003cp\u003eGitLab is the intelligent orchestration platform for DevSecOps. GitLab enables organizatio",
+    "content_hash": "2c712de98f0ec043ac74545ae1fe4c7e2d66caf434943ff7d90445c7ef832f79"
+  },
+  {
+    "source_job_id": "8695515002",
+    "ats_type": "greenhouse",
+    "ats_job_id": "8695515002",
+    "title": "Backend Engineer, Geo Team",
+    "company_name": "GitLab",
+    "apply_url": "https://job-boards.greenhouse.io/gitlab/jobs/8695515002",
+    "language": "en",
+    "location_raw": "Bangalore, India",
+    "work_mode": "",
+    "source_reported_posted_at": "2026-08-12T03:33:39Z",
+    "source_updated_at": "2026-08-12T03:33:39Z",
+    "description_len": 10139,
+    "description_head": "\u003cdiv class=\"content-intro\"\u003e\u003cp\u003eGitLab is the intelligent orchestration platform for DevSecOps. GitLab enables organizatio",
+    "content_hash": "a5279aeb665a855de08522da9386b763f2d4b3a0bca0c0ec430f2641230100d7"
+  },
+  {
+    "source_job_id": "8592891002",
+    "ats_type": "greenhouse",
+    "ats_job_id": "8592891002",
+    "title": "Engineering Manager, Growth",
+    "company_name": "GitLab",
+    "apply_url": "https://job-boards.greenhouse.io/gitlab/jobs/8592891002",
+    "language": "en",
+    "location_raw": "Remote, Canada; Remote, US",
+    "work_mode": "remote",
+    "source_reported_posted_at": "2026-06-17T22:15:14Z",
+    "source_updated_at": "2026-08-10T20:52:46Z",
+    "description_len": 14152,
+    "description_head": "\u003cdiv class=\"content-intro\"\u003e\u003cp\u003eGitLab is the intelligent orchestration platform for DevSecOps. GitLab enables organizatio",
+    "content_hash": "e90b3130b19299e7f36d36b5034a220d76401d1abdf090453af897f1de193d11"
+  }
+]

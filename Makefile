@@ -67,6 +67,20 @@ build: ## build the binary
 run: ## run the api role
 	go run ./cmd/devsignal --role=api
 
+.PHONY: run-worker
+run-worker: ## run pipeline workers + source polling
+	go run ./cmd/devsignal --role=worker
+
+.PHONY: add-source
+add-source: ## register a source: make add-source name=greenhouse:gitlab
+	@test -n "$(name)" || { echo "usage: make add-source name=greenhouse:gitlab"; exit 1; }
+	go run ./cmd/devsignal --role=add-source --source=$(name)
+
+.PHONY: ingest
+ingest: ## poll one source once: make ingest name=greenhouse:gitlab
+	@test -n "$(name)" || { echo "usage: make ingest name=greenhouse:gitlab"; exit 1; }
+	go run ./cmd/devsignal --role=ingest-once --source=$(name)
+
 # ---------------------------------------------------------------- quality
 .PHONY: fmt
 fmt: ## gofmt
@@ -93,8 +107,12 @@ check: fmt vet lint test ## everything that must pass before a commit
 # They exit non-zero on purpose: nobody should believe a gate passed when the
 # gate does not exist.
 .PHONY: test-golden
-test-golden: ## [step 7] source parser fixture tests
-	@echo "not built yet — arrives with the first source adapter (blueprint §35 step 7)"; exit 1
+test-golden: ## source parser fixture tests — refuse to auto-rebaseline
+	go test -count=1 ./internal/source/...
+
+.PHONY: golden-update
+golden-update: ## rewrite golden files (deliberate act; review the diff)
+	go test -count=1 ./internal/source/... -update
 
 .PHONY: test-integration
 test-integration: ## integration tests against the real stack (needs make up)
