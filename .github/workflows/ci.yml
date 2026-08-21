@@ -19,19 +19,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     services:
-      # Object storage: resumes and their extracted text live here, and the
-      # erasure guarantee is only meaningful if the store it deletes from is
-      # actually present in CI.
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: devsignal
-          MINIO_ROOT_PASSWORD: devsignal123
-        ports: ["9000:9000"]
-        options: >-
-          --health-cmd "mc ready local"
-          --health-interval 5s --health-timeout 3s --health-retries 20
-
       # pgvector, not postgres: v1 keeps rows, FTS and kNN in one database, and
       # the plain postgres images do not bundle the extension.
       postgres:
@@ -58,6 +45,28 @@ jobs:
           # duplicated version silently drifts from the one the code declares.
           go-version-file: go.mod
           cache: true
+
+      # Object storage cannot be a `services:` entry: the minio image's default
+      # command is just `minio` with no subcommand, and service containers have
+      # no way to supply `server /data`. Started here instead — early, so it
+      # warms up while formatting, vet, lint and build run.
+      #
+      # It is not optional: resumes and their extracted text live here, and the
+      # erasure guarantee is only meaningful if the store it deletes from exists.
+      - name: start object storage
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=devsignal -e MINIO_ROOT_PASSWORD=devsignal123 \
+            minio/minio:latest server /data
+          # The HTTP health endpoint, not `mc ready`: mc needs an alias
+          # configured first, which is why the service health-check never passed.
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "object storage ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "object storage did not become ready"; docker logs minio; exit 1
 
       - name: verify formatting
         run: |
