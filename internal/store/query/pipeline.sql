@@ -65,12 +65,14 @@ SELECT id, pipeline_state, attempts, state_entered_at
  WHERE pipeline_state NOT IN ('ready','failed_permanent')
    AND (lease_until IS NULL OR lease_until < now())
    AND state_entered_at < now() - sqlc.arg(threshold)::interval
- ORDER BY state_entered_at
+ -- swept_at is the progress cursor: never-swept rows first, so a backlog larger
+ -- than one batch is worked through instead of the same head being requeued.
+ ORDER BY swept_at NULLS FIRST, state_entered_at
  LIMIT sqlc.arg(batch)::int;
 
 -- name: RequeueStranded :execrows
 UPDATE opportunity
-   SET next_attempt_at = now(), lease_until = NULL
+   SET next_attempt_at = now(), lease_until = NULL, swept_at = now()
  WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
 -- name: PipelineStats :many

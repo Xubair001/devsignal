@@ -31,6 +31,7 @@ import (
 
 	// Importing an adapter family is what enables it.
 	_ "github.com/Xubair001/devsignal/internal/source/greenhouse"
+	"github.com/Xubair001/devsignal/internal/stages"
 	"github.com/Xubair001/devsignal/internal/store"
 	"github.com/Xubair001/devsignal/pkg/logger"
 	"github.com/Xubair001/devsignal/pkg/telemetry"
@@ -235,22 +236,32 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 	cfg := pipeline.DefaultConfig()
 	queue := pipeline.NewQueue(pool, cfg, log)
 
+	// Pass-through where the real work arrives at a later step. Replacing one of
+	// these IS that step's work; they are deliberately visible rather than hidden
+	// behind a fake implementation.
 	passthrough := func(context.Context, pipeline.Item) error { return nil }
+
+	normalizer := stages.NewNormalizer(pool, log)
+	deduper := stages.NewDeduper(pool, log)
 
 	// Concurrency per stage is set independently — that is the whole point of
 	// separating them (blueprint §25). AI work will be the bottleneck, not fetch.
-	stages := []pipeline.Stage{
+	pipelineStages := []pipeline.Stage{
+		// Tier-A bulk APIs create rows directly at 'parsed', so these two states
+		// are only used by sources where discovery and detail fetch are separate.
 		{State: pipeline.StateDiscovered, Concurrency: 4, Handle: passthrough},
 		{State: pipeline.StateFetched, Concurrency: 8, Handle: passthrough},
-		{State: pipeline.StateParsed, Concurrency: 8, Handle: passthrough},
-		{State: pipeline.StateNormalized, Concurrency: 4, Handle: passthrough},
-		{State: pipeline.StateDeduped, Concurrency: 4, Handle: passthrough},
-		{State: pipeline.StateEnriched, Concurrency: 2, Handle: passthrough},
+
+		{State: pipeline.StateParsed, Concurrency: 8, Handle: normalizer.Handle},
+		{State: pipeline.StateNormalized, Concurrency: 4, Handle: deduper.Handle},
+
+		{State: pipeline.StateDeduped, Concurrency: 4, Handle: passthrough},  // enrichment: step 12
+		{State: pipeline.StateEnriched, Concurrency: 2, Handle: passthrough}, // embeddings: step 13
 		{State: pipeline.StateEmbedded, Concurrency: 2, Handle: passthrough},
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
-	for _, st := range stages {
+	for _, st := range pipelineStages {
 		w := pipeline.NewWorker(queue, st, log)
 		g.Go(func() error { return w.Run(gctx) })
 	}
@@ -259,6 +270,10 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 
 	runner := ingest.NewRunner(pool, sourceClient(), log)
 	g.Go(func() error { return runner.Run(gctx) })
+
+	// Per-item dedup is order-dependent; this makes it eventually consistent.
+	dedupeSweeper := stages.NewDedupeSweeper(deduper)
+	g.Go(func() error { return dedupeSweeper.Run(gctx) })
 
 	// Periodic stats: the state distribution IS the pipeline dashboard.
 	g.Go(func() error {
@@ -280,7 +295,7 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 		}
 	})
 
-	log.Info("workers running", "stages", len(stages))
+	log.Info("workers running", "stages", len(pipelineStages))
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("workers: %w", err)
 	}

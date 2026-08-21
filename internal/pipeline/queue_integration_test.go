@@ -264,20 +264,23 @@ func TestSweeperRequeuesStranded(t *testing.T) {
 	c.SweepAfter = 10 * time.Millisecond
 	q := NewQueue(pool, c, quietLog())
 
-	n, err := q.Sweep(ctx)
-	if err != nil {
-		t.Fatalf("sweep: %v", err)
+	// Sweep in a loop and assert on THIS row, not on the batch. SweepStranded
+	// takes the oldest stranded rows up to the batch size, so with other data in
+	// the database a single sweep may never reach the row this test seeded — the
+	// earlier version of this test silently depended on an empty database.
+	var due bool
+	for i := 0; i < 20 && !due; i++ {
+		if _, err := q.Sweep(ctx); err != nil {
+			t.Fatalf("sweep %d: %v", i, err)
+		}
+		if err := pool.QueryRow(ctx,
+			`SELECT next_attempt_at <= now() AND lease_until IS NULL
+			   FROM opportunity WHERE id=$1`, ids[0]).Scan(&due); err != nil {
+			t.Fatalf("read back: %v", err)
+		}
 	}
-	if n < 1 {
-		t.Fatal("sweeper did not requeue the stranded record")
-	}
-	// Requeued means claimable now, not in a day.
-	items, err := q.Claim(ctx, StateNormalized)
-	if err != nil {
-		t.Fatalf("claim after sweep: %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatal("record not claimable after sweep")
+	if !due {
+		t.Fatal("sweeper never requeued the stranded record")
 	}
 }
 
@@ -420,5 +423,48 @@ func TestUnrelatedWriteDoesNotResetStrandingClock(t *testing.T) {
 	}
 	if n < 1 {
 		t.Fatal("record hidden from the sweeper by an unrelated write")
+	}
+}
+
+// Regression: the sweeper must make progress through a backlog larger than one
+// batch. It ordered by state_entered_at, which requeuing does not change, so
+// every sweep returned the same oldest batch and the tail was starved forever.
+// A starving safety net is worse than none, because it looks like it is working.
+func TestSweeperMakesProgressThroughABacklog(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	const total = 12
+	_, ids := seed(t, pool, total, StateNormalized)
+
+	// Strand every one of them, all unreachable by normal claiming.
+	if _, err := pool.Exec(ctx,
+		`UPDATE opportunity SET next_attempt_at = now() + interval '1 day',
+		 lease_until = NULL, swept_at = NULL WHERE id = ANY($1)`, ids); err != nil {
+		t.Fatalf("strand: %v", err)
+	}
+
+	c := cfg()
+	c.SweepAfter = 10 * time.Millisecond
+	c.BatchSize = 3 // deliberately far smaller than the backlog
+	q := NewQueue(pool, c, quietLog())
+	time.Sleep(50 * time.Millisecond)
+
+	// Enough sweeps to cover the backlog several times over if progress is made,
+	// but never enough if the same head is returned repeatedly.
+	for i := 0; i < 12; i++ {
+		if _, err := q.Sweep(ctx); err != nil {
+			t.Fatalf("sweep %d: %v", i, err)
+		}
+	}
+
+	var requeued int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM opportunity
+		  WHERE id = ANY($1) AND next_attempt_at <= now()`, ids).Scan(&requeued); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if requeued != total {
+		t.Fatalf("%d of %d stranded records requeued: the sweeper is not advancing "+
+			"through the backlog", requeued, total)
 	}
 }

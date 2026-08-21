@@ -255,7 +255,7 @@ INSERT INTO opportunity (
     work_mode, location_region, language, apply_method, ats_type,
     source_reported_posted_at, content_hash, pipeline_state
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'parsed')
-RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at
+RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at
 `
 
 type InsertOpportunityFromPostingParams struct {
@@ -338,6 +338,11 @@ func (q *Queries) InsertOpportunityFromPosting(ctx context.Context, arg InsertOp
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StateEnteredAt,
+		&i.IsManagement,
+		&i.NormalizationVersion,
+		&i.BlockKey,
+		&i.MergedInto,
+		&i.SweptAt,
 	)
 	return i, err
 }
@@ -564,7 +569,7 @@ INSERT INTO company (canonical_domain, display_name)
 VALUES ($1, $2)
 ON CONFLICT (canonical_domain) DO UPDATE
    SET display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), company.display_name)
-RETURNING id, canonical_domain, display_name, is_agency, industry, size_band, stage, hq_country, created_at, updated_at
+RETURNING id, canonical_domain, display_name, is_agency, industry, size_band, stage, hq_country, created_at, updated_at, domain_confirmed
 `
 
 type UpsertCompanyByDomainParams struct {
@@ -588,6 +593,7 @@ func (q *Queries) UpsertCompanyByDomain(ctx context.Context, arg UpsertCompanyBy
 		&i.HqCountry,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DomainConfirmed,
 	)
 	return i, err
 }

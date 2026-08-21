@@ -46,6 +46,7 @@ type Company struct {
 	HqCountry       *string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	DomainConfirmed bool
 }
 
 type CompanyAlias struct {
@@ -53,6 +54,30 @@ type CompanyAlias struct {
 	Alias     string
 	SourceID  pgtype.UUID
 	CreatedAt pgtype.Timestamptz
+}
+
+type CompanyMerge struct {
+	ID            pgtype.UUID
+	FromCompanyID pgtype.UUID
+	IntoCompanyID pgtype.UUID
+	Reason        string
+	Confidence    *float32
+	MergedBy      string
+	MergedAt      pgtype.Timestamptz
+	UndoneAt      pgtype.Timestamptz
+}
+
+type MergeCandidate struct {
+	ID                 pgtype.UUID
+	LeftOpportunityID  pgtype.UUID
+	RightOpportunityID pgtype.UUID
+	Reason             string
+	Confidence         float32
+	WithheldBecause    string
+	Resolution         *string
+	ResolvedBy         *string
+	ResolvedAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
 }
 
 type Opportunity struct {
@@ -106,6 +131,11 @@ type Opportunity struct {
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	StateEnteredAt         pgtype.Timestamptz
+	IsManagement           bool
+	NormalizationVersion   *string
+	BlockKey               *string
+	MergedInto             pgtype.UUID
+	SweptAt                pgtype.Timestamptz
 }
 
 type OpportunityEmbedding struct {
@@ -115,6 +145,18 @@ type OpportunityEmbedding struct {
 	EmbeddingDim     int32
 	Embedding        pgvector.Vector
 	CreatedAt        pgtype.Timestamptz
+}
+
+type OpportunityMerge struct {
+	ID                pgtype.UUID
+	FromOpportunityID pgtype.UUID
+	IntoOpportunityID pgtype.UUID
+	Reason            string
+	Confidence        *float32
+	SourceRowsMoved   int32
+	MergedBy          string
+	MergedAt          pgtype.Timestamptz
+	UndoneAt          pgtype.Timestamptz
 }
 
 type OpportunitySkill struct {

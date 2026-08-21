@@ -7,12 +7,14 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–7 are done.** Repo, CI, local stack, config/logging/tracing, canonical
-schema, identity, the pipeline spine, and the first source adapter. It ingests real postings:
+**Blueprint §35 steps 2–8 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+schema, identity, the pipeline spine, the first source adapter, and normalization + dedup.
+It ingests real postings:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`.
 
-Next: step 8 (company entity resolution proper, normalization, dedup) then step 9 (liveness
-display) and step 10 (scale to 300–500 boards + source health monitor). Do not skip ahead because a
+Next: step 9 (liveness display) then step 10 (scale to 300–500 boards + source health monitor).
+Company entity resolution is deterministic-only so far: the ATS board token and a revealed domain.
+Alias and fuzzy matching are still to come, and are never auto-merged. Do not skip ahead because a
 later step looks easier — the order is dependency-ordered, not thematic.
 
 Only `greenhouse:gitlab` is registered, as a proof of slice. Adding the rest is gated on the

@@ -109,7 +109,7 @@ func (q *Queries) ClaimBatch(ctx context.Context, arg ClaimBatchParams) ([]Claim
 const createOpportunity = `-- name: CreateOpportunity :one
 INSERT INTO opportunity (company_id, title_raw, title_normalized, pipeline_state, content_hash)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at
+RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at
 `
 
 type CreateOpportunityParams struct {
@@ -180,6 +180,11 @@ func (q *Queries) CreateOpportunity(ctx context.Context, arg CreateOpportunityPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StateEnteredAt,
+		&i.IsManagement,
+		&i.NormalizationVersion,
+		&i.BlockKey,
+		&i.MergedInto,
+		&i.SweptAt,
 	)
 	return i, err
 }
@@ -308,7 +313,7 @@ func (q *Queries) ReleaseClaim(ctx context.Context, id pgtype.UUID) error {
 
 const requeueStranded = `-- name: RequeueStranded :execrows
 UPDATE opportunity
-   SET next_attempt_at = now(), lease_until = NULL
+   SET next_attempt_at = now(), lease_until = NULL, swept_at = now()
  WHERE id = ANY($1::uuid[])
 `
 
@@ -326,7 +331,9 @@ SELECT id, pipeline_state, attempts, state_entered_at
  WHERE pipeline_state NOT IN ('ready','failed_permanent')
    AND (lease_until IS NULL OR lease_until < now())
    AND state_entered_at < now() - $1::interval
- ORDER BY state_entered_at
+ -- swept_at is the progress cursor: never-swept rows first, so a backlog larger
+ -- than one batch is worked through instead of the same head being requeued.
+ ORDER BY swept_at NULLS FIRST, state_entered_at
  LIMIT $2::int
 `
 
