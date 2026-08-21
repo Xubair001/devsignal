@@ -18,6 +18,15 @@ import (
 // retries; it must never force the write.
 var ErrVersionConflict = errors.New("pipeline: version conflict")
 
+// ErrHandled means the handler completed the work AND settled the row's state
+// itself, so the worker must not advance it again.
+//
+// A handler that writes to the row it is advancing has to do both in one
+// statement: any write bumps version, which then invalidates the worker's
+// separate version-guarded Advance. Getting this wrong livelocks the stage —
+// every item succeeds, every advance conflicts, nothing ever progresses.
+var ErrHandled = errors.New("pipeline: handled by stage")
+
 type Config struct {
 	BatchSize     int32
 	Lease         time.Duration

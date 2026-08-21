@@ -7,12 +7,13 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–8 are done.** Repo, CI, local stack, config/logging/tracing, canonical
-schema, identity, the pipeline spine, the first source adapter, and normalization + dedup.
-It ingests real postings:
+**Blueprint §35 steps 2–9 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
+read API with liveness and ghost-risk signals. It ingests real postings:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`.
 
-Next: step 9 (liveness display) then step 10 (scale to 300–500 boards + source health monitor).
+Next: step 10 (scale to 300–500 boards + source health monitor), which is where the Tier-A source
+list becomes the real blocker.
 Company entity resolution is deterministic-only so far: the ATS board token and a revealed domain.
 Alias and fuzzy matching are still to come, and are never auto-merged. Do not skip ahead because a
 later step looks easier — the order is dependency-ordered, not thematic.
@@ -62,6 +63,7 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/digest/` | Notification budget, quiet hours, the empty case |
 | `internal/auth/`, `internal/profile/` | Identity, sessions, tenancy, resume ingestion |
 | `internal/admin/` | Source health, merge/unmerge, quarantine, flag queue |
+| `internal/ghostrisk/` | Observable ghost-listing signals. Pure; bands + reasons, never a bare score |
 | `internal/eval/` | Evaluation harness + labelled fixtures. Gates scoring changes in CI |
 | `pkg/` | logger, telemetry, middleware, clients. Nothing domain-specific |
 | `migrations/` | golang-migrate. Never hand-write DDL outside a migration |

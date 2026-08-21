@@ -100,7 +100,12 @@ func (d *Deduper) Handle(ctx context.Context, it pipeline.Item) error {
 		}
 		// Merge into the OLDER row: first_seen_at is ours and trustworthy, so the
 		// earlier sighting is the canonical one and its age is preserved.
-		return d.merge(ctx, it.ID, c.ID, *me.BlockKey, v)
+		if err := d.merge(ctx, it.ID, c.ID, *me.BlockKey, v); err != nil {
+			return err
+		}
+		// This row is now merged away, and merge bumped its version. It must not
+		// be advanced: it is no longer a canonical posting.
+		return pipeline.ErrHandled
 	}
 	return nil
 }

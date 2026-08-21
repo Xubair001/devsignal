@@ -15,6 +15,9 @@ UPDATE opportunity
  WHERE id IN (
    SELECT o.id FROM opportunity o
     WHERE o.pipeline_state = sqlc.arg(state)
+      -- A merged row has left the pipeline: it is represented by its canonical
+      -- row and must never be claimed or swept again.
+      AND o.merged_into IS NULL
       AND o.next_attempt_at <= now()
       AND (o.lease_until IS NULL OR o.lease_until < now())
     ORDER BY o.next_attempt_at
@@ -63,6 +66,7 @@ UPDATE opportunity
 SELECT id, pipeline_state, attempts, state_entered_at
   FROM opportunity
  WHERE pipeline_state NOT IN ('ready','failed_permanent')
+   AND merged_into IS NULL
    AND (lease_until IS NULL OR lease_until < now())
    AND state_entered_at < now() - sqlc.arg(threshold)::interval
  -- swept_at is the progress cursor: never-swept rows first, so a backlog larger
@@ -80,6 +84,7 @@ UPDATE opportunity
 -- stranded — alert on it.
 SELECT pipeline_state, count(*) AS total, min(state_entered_at) AS oldest
   FROM opportunity
+ WHERE merged_into IS NULL
  GROUP BY pipeline_state
  ORDER BY pipeline_state;
 

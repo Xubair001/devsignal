@@ -3,8 +3,11 @@ SELECT id, version, title_raw, location_region, description_text, company_id
   FROM opportunity WHERE id = $1;
 
 -- name: ApplyNormalization :execrows
--- Version-guarded: another stage may have written first, in which case the
--- caller reloads rather than clobbering.
+-- Sets the derived fields AND advances the state in ONE statement.
+--
+-- These cannot be separate: any write bumps version, which would invalidate a
+-- follow-up version-guarded advance and livelock the stage. This is the
+-- blueprint's rule that state advances in the same transaction as the work.
 UPDATE opportunity
    SET title_normalized      = sqlc.arg(title_normalized),
        role_family           = sqlc.arg(role_family),
@@ -17,8 +20,15 @@ UPDATE opportunity
        simhash               = sqlc.arg(simhash),
        block_key             = sqlc.arg(block_key),
        normalization_version = sqlc.arg(normalization_version),
+       pipeline_state        = sqlc.arg(next_state),
+       next_attempt_at       = now(),
+       attempts              = 0,
+       last_error            = NULL,
+       lease_until           = NULL,
        version               = version + 1
- WHERE id = sqlc.arg(id) AND version = sqlc.arg(version);
+ WHERE id = sqlc.arg(id)
+   AND version = sqlc.arg(version)
+   AND pipeline_state = sqlc.arg(current_state);
 
 -- name: FindBlockCandidates :many
 -- Only ever compares within a block, and never against a row already merged

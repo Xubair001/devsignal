@@ -125,17 +125,20 @@ type Opportunity struct {
 	LeaseUntil             pgtype.Timestamptz
 	Version                int32
 	QualityScore           *float32
-	GhostRiskScore         *float32
-	ContentHash            []byte
-	Simhash                *int64
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	StateEnteredAt         pgtype.Timestamptz
-	IsManagement           bool
-	NormalizationVersion   *string
-	BlockKey               *string
-	MergedInto             pgtype.UUID
-	SweptAt                pgtype.Timestamptz
+	// Reserved for a periodic snapshot. Ghost risk is volatile and is computed at read time from repost_count, first_seen_at, last_seen_at and apply method. NULL means no snapshot has been taken, never "no risk".
+	GhostRiskScore             *float32
+	ContentHash                []byte
+	Simhash                    *int64
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	StateEnteredAt             pgtype.Timestamptz
+	IsManagement               bool
+	NormalizationVersion       *string
+	BlockKey                   *string
+	MergedInto                 pgtype.UUID
+	SweptAt                    pgtype.Timestamptz
+	RepostCount                int32
+	SourcePostedAtAtLastChange pgtype.Timestamptz
 }
 
 type OpportunityEmbedding struct {

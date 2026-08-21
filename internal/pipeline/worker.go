@@ -109,6 +109,16 @@ func (w *Worker) process(ctx context.Context, items []Item) {
 
 func (w *Worker) handleOne(ctx context.Context, it Item) {
 	err := w.safeHandle(ctx, it)
+	if errors.Is(err, ErrHandled) {
+		// The handler advanced the row itself, in the same statement as its write.
+		return
+	}
+	if errors.Is(err, ErrVersionConflict) {
+		// Another stage got there first. Leave it; the next claim or the sweeper
+		// picks it up with a fresh version.
+		w.log.Debug("version conflict before work; yielding", "id", it.ID.String())
+		return
+	}
 	if err == nil {
 		if aerr := w.queue.Advance(ctx, it); aerr != nil {
 			if errors.Is(aerr, ErrVersionConflict) {

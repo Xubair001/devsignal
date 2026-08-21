@@ -26,6 +26,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
 	"github.com/Xubair001/devsignal/internal/ingest"
+	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
 	"github.com/Xubair001/devsignal/internal/source"
 
@@ -162,8 +163,14 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 	authSvc := auth.NewService(pool, log, auth.DefaultPolicy(), nil)
 	authH := auth.NewHandler(authSvc, log)
 
+	oppH := opportunity.NewHandler(opportunity.NewService(pool, nil), log)
+
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Mount("/auth", authH.Routes())
+		// Public read surface: the corpus is not user-specific until matching
+		// exists (step 15). Personalized routes live under the authenticated
+		// group below.
+		api.Mount("/opportunities", oppH.Routes())
 		// Everything below requires a live session. Scoping is enforced here and
 		// in the query, never per handler.
 		api.Group(func(priv chi.Router) {

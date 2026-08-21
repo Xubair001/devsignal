@@ -45,6 +45,11 @@ func (n *Normalizer) Handle(ctx context.Context, it pipeline.Item) error {
 
 	block := dedupe.BlockKey(row.CompanyID.String(), row.TitleRaw, derefOr(loc.Country, ""))
 
+	next, err := pipeline.Next(it.State)
+	if err != nil {
+		return err
+	}
+
 	affected, err := n.q.ApplyNormalization(ctx, store.ApplyNormalizationParams{
 		TitleNormalized:      title.Normalized,
 		RoleFamily:           title.RoleFamily,
@@ -57,18 +62,21 @@ func (n *Normalizer) Handle(ctx context.Context, it pipeline.Item) error {
 		Simhash:              signedHash(sig),
 		BlockKey:             &block,
 		NormalizationVersion: strptr(normalize.Version),
+		NextState:            string(next),
 		ID:                   it.ID,
 		Version:              it.Version,
+		CurrentState:         string(it.State),
 	})
 	if err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
 	if affected == 0 {
-		// Someone else advanced this row. Correct behaviour is to yield, not to
-		// force the write.
+		// Someone else advanced this row. Yield rather than forcing the write.
 		return pipeline.ErrVersionConflict
 	}
-	return nil
+	// The state was advanced in the same statement, so the worker must not try
+	// again with the now-stale version.
+	return pipeline.ErrHandled
 }
 
 // signedHash reinterprets the unsigned signature as int64 for storage.

@@ -147,7 +147,12 @@ func (s *Service) upsert(ctx context.Context, sourceID pgtype.UUID, a source.Ada
 		if err == nil {
 			// Seen before through this source.
 			if string(existing.ContentHash) == string(p.ContentHash) {
-				if _, err := q.MarkOpportunitySeen(ctx, existing.OpportunityID); err != nil {
+				// Content identical. Pass their claimed date so a refresh of an
+				// unchanged listing is counted.
+				if _, err := q.MarkOpportunitySeen(ctx, store.MarkOpportunitySeenParams{
+					SourcePostedAt: optTime(p.SourceReportedPostedAt),
+					ID:             existing.OpportunityID,
+				}); err != nil {
 					return err
 				}
 				out = outcomeUnchanged

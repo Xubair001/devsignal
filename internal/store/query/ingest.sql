@@ -23,8 +23,12 @@ SELECT opportunity_id FROM opportunity_source
 INSERT INTO opportunity (
     company_id, title_raw, title_normalized, description_text,
     work_mode, location_region, language, apply_method, ats_type,
-    source_reported_posted_at, content_hash, pipeline_state
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'parsed')
+    source_reported_posted_at, content_hash, source_posted_at_at_last_change,
+    liveness_checked_at, pipeline_state
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$10,
+    -- Seeing a posting for the first time IS a verification. Leaving this NULL
+    -- made "verified open, checked N ago" unanswerable for every new posting.
+    now(),'parsed')
 RETURNING *;
 
 -- name: UpdateOpportunityFromPosting :execrows
@@ -34,6 +38,9 @@ UPDATE opportunity
    SET title_raw = $2, title_normalized = $3, description_text = $4,
        work_mode = $5, location_region = $6, language = $7,
        source_reported_posted_at = $8, content_hash = $9,
+       -- Baseline for refresh detection: the date they claimed at the moment the
+       -- content last actually changed.
+       source_posted_at_at_last_change = $8,
        pipeline_state = 'parsed', next_attempt_at = now(),
        attempts = 0, last_error = NULL,
        version = version + 1,
@@ -44,10 +51,21 @@ UPDATE opportunity
 -- name: MarkOpportunitySeen :execrows
 -- Unchanged content, but observed. Reopens a record that a flaky poll had
 -- closed: seeing it again is stronger evidence than having missed it.
+--
+-- Also detects a refresh: identical content but the source moved its own
+-- posted-at forward. That is the strongest observable ghost signal, and it is
+-- only visible here — at the one moment we know the content did NOT change.
 UPDATE opportunity
    SET last_seen_at = now(), liveness_checked_at = now(),
-       consecutive_misses = 0, closed_at = NULL, close_reason = NULL
- WHERE id = $1;
+       consecutive_misses = 0, closed_at = NULL, close_reason = NULL,
+       repost_count = repost_count + CASE
+           WHEN sqlc.arg(source_posted_at)::timestamptz IS NOT NULL
+            AND source_posted_at_at_last_change IS NOT NULL
+            AND sqlc.arg(source_posted_at)::timestamptz > source_posted_at_at_last_change
+           THEN 1 ELSE 0 END,
+       source_reported_posted_at = COALESCE(sqlc.arg(source_posted_at)::timestamptz,
+                                            source_reported_posted_at)
+ WHERE id = sqlc.arg(id);
 
 -- name: InsertSourceRow :one
 INSERT INTO opportunity_source (

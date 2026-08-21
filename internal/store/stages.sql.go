@@ -24,8 +24,15 @@ UPDATE opportunity
        simhash               = $9,
        block_key             = $10,
        normalization_version = $11,
+       pipeline_state        = $12,
+       next_attempt_at       = now(),
+       attempts              = 0,
+       last_error            = NULL,
+       lease_until           = NULL,
        version               = version + 1
- WHERE id = $12 AND version = $13
+ WHERE id = $13
+   AND version = $14
+   AND pipeline_state = $15
 `
 
 type ApplyNormalizationParams struct {
@@ -40,12 +47,17 @@ type ApplyNormalizationParams struct {
 	Simhash              *int64
 	BlockKey             *string
 	NormalizationVersion *string
+	NextState            string
 	ID                   pgtype.UUID
 	Version              int32
+	CurrentState         string
 }
 
-// Version-guarded: another stage may have written first, in which case the
-// caller reloads rather than clobbering.
+// Sets the derived fields AND advances the state in ONE statement.
+//
+// These cannot be separate: any write bumps version, which would invalidate a
+// follow-up version-guarded advance and livelock the stage. This is the
+// blueprint's rule that state advances in the same transaction as the work.
 func (q *Queries) ApplyNormalization(ctx context.Context, arg ApplyNormalizationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, applyNormalization,
 		arg.TitleNormalized,
@@ -59,8 +71,10 @@ func (q *Queries) ApplyNormalization(ctx context.Context, arg ApplyNormalization
 		arg.Simhash,
 		arg.BlockKey,
 		arg.NormalizationVersion,
+		arg.NextState,
 		arg.ID,
 		arg.Version,
+		arg.CurrentState,
 	)
 	if err != nil {
 		return 0, err

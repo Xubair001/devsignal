@@ -54,6 +54,9 @@ UPDATE opportunity
  WHERE id IN (
    SELECT o.id FROM opportunity o
     WHERE o.pipeline_state = $2
+      -- A merged row has left the pipeline: it is represented by its canonical
+      -- row and must never be claimed or swept again.
+      AND o.merged_into IS NULL
       AND o.next_attempt_at <= now()
       AND (o.lease_until IS NULL OR o.lease_until < now())
     ORDER BY o.next_attempt_at
@@ -109,7 +112,7 @@ func (q *Queries) ClaimBatch(ctx context.Context, arg ClaimBatchParams) ([]Claim
 const createOpportunity = `-- name: CreateOpportunity :one
 INSERT INTO opportunity (company_id, title_raw, title_normalized, pipeline_state, content_hash)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at
+RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at, repost_count, source_posted_at_at_last_change
 `
 
 type CreateOpportunityParams struct {
@@ -185,6 +188,8 @@ func (q *Queries) CreateOpportunity(ctx context.Context, arg CreateOpportunityPa
 		&i.BlockKey,
 		&i.MergedInto,
 		&i.SweptAt,
+		&i.RepostCount,
+		&i.SourcePostedAtAtLastChange,
 	)
 	return i, err
 }
@@ -266,6 +271,7 @@ func (q *Queries) GetOpportunityState(ctx context.Context, id pgtype.UUID) (GetO
 const pipelineStats = `-- name: PipelineStats :many
 SELECT pipeline_state, count(*) AS total, min(state_entered_at) AS oldest
   FROM opportunity
+ WHERE merged_into IS NULL
  GROUP BY pipeline_state
  ORDER BY pipeline_state
 `
@@ -329,6 +335,7 @@ const sweepStranded = `-- name: SweepStranded :many
 SELECT id, pipeline_state, attempts, state_entered_at
   FROM opportunity
  WHERE pipeline_state NOT IN ('ready','failed_permanent')
+   AND merged_into IS NULL
    AND (lease_until IS NULL OR lease_until < now())
    AND state_entered_at < now() - $1::interval
  -- swept_at is the progress cursor: never-swept rows first, so a backlog larger
