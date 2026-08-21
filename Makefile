@@ -4,6 +4,9 @@ SHELL := /bin/bash
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
 DB_URL ?= postgres://devsignal:devsignal@localhost:65432/devsignal?sslmode=disable
+S3_ENDPOINT ?= http://localhost:65000
+S3_ACCESS_KEY ?= devsignal
+S3_SECRET_KEY ?= devsignal123
 BIN    := bin/devsignal
 
 .PHONY: help
@@ -116,12 +119,17 @@ golden-update: ## rewrite golden files (deliberate act; review the diff)
 
 .PHONY: test-integration
 test-integration: ## integration tests against the real stack (needs make up)
-	DATABASE_URL="$(DB_URL)" go test -tags integration -count=1 -timeout 300s ./...
+	DATABASE_URL="$(DB_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
+	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
+	go test -tags integration -count=1 -timeout 300s ./...
 
 .PHONY: eval
 eval: ## [step 16] ranking evaluation harness — gates scoring changes
 	@echo "not built yet — arrives with the eval harness (blueprint §35 step 16)"; exit 1
 
 .PHONY: check-erasure
-check-erasure: ## [step 11] proves a deleted identifier appears nowhere
-	@echo "not built yet — arrives with profile/resume ingestion (blueprint §35 step 11)"; exit 1
+check-erasure: ## proves an erased user leaves no trace in any store
+	DATABASE_URL="$(DB_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
+	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
+	go test -tags integration -count=1 -v -run 'TestErasure|TestExtractedTextIsNot' \
+	  ./internal/profile/ ./pkg/blob/

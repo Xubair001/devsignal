@@ -19,6 +19,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     services:
+      # Object storage: resumes and their extracted text live here, and the
+      # erasure guarantee is only meaningful if the store it deletes from is
+      # actually present in CI.
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: devsignal
+          MINIO_ROOT_PASSWORD: devsignal123
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "mc ready local"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
       # pgvector, not postgres: v1 keeps rows, FTS and kNN in one database, and
       # the plain postgres images do not bundle the extension.
       postgres:
@@ -33,6 +46,9 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 20
     env:
       DATABASE_URL: postgres://devsignal:devsignal@localhost:5432/devsignal?sslmode=disable
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: devsignal
+      S3_SECRET_KEY: devsignal123
     steps:
       - uses: actions/checkout@v7
 

@@ -28,12 +28,14 @@ import (
 	"github.com/Xubair001/devsignal/internal/ingest"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
+	"github.com/Xubair001/devsignal/internal/profile"
 	"github.com/Xubair001/devsignal/internal/source"
 
 	// Importing an adapter family is what enables it.
 	_ "github.com/Xubair001/devsignal/internal/source/greenhouse"
 	"github.com/Xubair001/devsignal/internal/stages"
 	"github.com/Xubair001/devsignal/internal/store"
+	"github.com/Xubair001/devsignal/pkg/blob"
 	"github.com/Xubair001/devsignal/pkg/logger"
 	"github.com/Xubair001/devsignal/pkg/telemetry"
 )
@@ -172,6 +174,18 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 
 	oppH := opportunity.NewHandler(opportunity.NewService(pool, nil), log)
 
+	// Object storage is required for resumes. Failing at startup is correct: an
+	// API that accepts an upload it cannot store would lose user data silently.
+	store2, err := blob.New(ctx, blob.Config{
+		Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket,
+		AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey,
+		PathStyle: cfg.S3PathStyle,
+	})
+	if err != nil {
+		return fmt.Errorf("object storage: %w", err)
+	}
+	profileH := profile.NewHandler(profile.NewService(pool, store2, log), log)
+
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Mount("/auth", authH.Routes())
 		// Public read surface: the corpus is not user-specific until matching
@@ -182,6 +196,9 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		// in the query, never per handler.
 		api.Group(func(priv chi.Router) {
 			priv.Use(authH.Authenticator)
+			// Profile, resumes and erasure are all the caller's own data, so they
+			// live behind authentication and read the identity from the context.
+			priv.Mount("/profile", profileH.Routes())
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {

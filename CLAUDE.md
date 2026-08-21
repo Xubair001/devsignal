@@ -7,16 +7,21 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–10 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–11 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
-read API with liveness and ghost-risk signals, and source-health monitoring. It ingests real
+read API with liveness and ghost-risk signals, source-health monitoring, and the developer
+profile with resume ingestion and verified erasure. It ingests real
 postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
 
-Next: step 11 (profile: manual, then resume ingestion). Scaling past the two boards currently
+Next: step 12 (extraction with a content-hash cache). Scaling past the two boards currently
 registered is blocked on the Tier-A source list, not on code — `add-sources` takes a file.
+
+Erasure is real and `make check-erasure` proves it. The one part still open is BACKUPS: either
+crypto-shredding with per-user keys, or a documented maximum retention window stated to users
+(blueprint §33.3). The live-store guarantee does not depend on that choice; the privacy notice does.
 Company entity resolution is deterministic-only so far: the ATS board token and a revealed domain.
 Alias and fuzzy matching are still to come, and are never auto-merged. Do not skip ahead because a
 later step looks easier — the order is dependency-ordered, not thematic.
@@ -68,6 +73,8 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/admin/` | Source health, merge/unmerge, quarantine, flag queue |
 | `internal/ghostrisk/` | Observable ghost-listing signals. Pure; bands + reasons, never a bare score |
 | `internal/sourcehealth/` | Parser-rot detection. Pure; relative drops against a source's own baseline |
+| `internal/profile/` | Profile, resume ingestion, and the erasure inventory. Add a location when you add a store |
+| `pkg/blob/` | Object storage. Per-user key prefixes are what make erasure one call |
 | `internal/eval/` | Evaluation harness + labelled fixtures. Gates scoring changes in CI |
 | `pkg/` | logger, telemetry, middleware, clients. Nothing domain-specific |
 | `migrations/` | golang-migrate. Never hand-write DDL outside a migration |

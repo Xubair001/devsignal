@@ -67,6 +67,22 @@ type CompanyMerge struct {
 	UndoneAt      pgtype.Timestamptz
 }
 
+type ErasureRequest struct {
+	ID          pgtype.UUID
+	UserID      pgtype.UUID
+	RequestedAt pgtype.Timestamptz
+	CompletedAt pgtype.Timestamptz
+}
+
+type ErasureStep struct {
+	RequestID   pgtype.UUID
+	Location    string
+	Status      string
+	Items       int32
+	Detail      *string
+	CompletedAt pgtype.Timestamptz
+}
+
 type MergeCandidate struct {
 	ID                 pgtype.UUID
 	LeftOpportunityID  pgtype.UUID
@@ -193,6 +209,35 @@ type OpportunitySource struct {
 	CreatedAt       pgtype.Timestamptz
 }
 
+type Profile struct {
+	UserID             pgtype.UUID
+	TenantID           pgtype.UUID
+	Headline           *string
+	YearsExperience    *int16
+	SeniorityOrdinal   *int16
+	IsManagement       bool
+	TargetRoleFamilies []string
+	TargetCountries    []string
+	WorkModePreference *string
+	Languages          []string
+	MinSalaryMinor     *int64
+	SalaryCurrency     *string
+	SalaryPeriod       *string
+	WorkAuthorization  []byte
+	ProfileVersion     int32
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type ProfileSkill struct {
+	UserID      pgtype.UUID
+	SkillID     pgtype.UUID
+	Origin      string
+	Proficiency *int16
+	Years       *int16
+	CreatedAt   pgtype.Timestamptz
+}
+
 type RefreshToken struct {
 	ID         pgtype.UUID
 	FamilyID   pgtype.UUID
@@ -204,6 +249,22 @@ type RefreshToken struct {
 	RevokedAt  pgtype.Timestamptz
 	ExpiresAt  pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
+}
+
+type Resume struct {
+	ID            pgtype.UUID
+	UserID        pgtype.UUID
+	ObjectKey     string
+	TextObjectKey *string
+	Filename      *string
+	ContentType   *string
+	SizeBytes     int64
+	Sha256        []byte
+	TextChars     *int32
+	ParseState    string
+	ParseError    *string
+	UploadedAt    pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
 }
 
 type Skill struct {
