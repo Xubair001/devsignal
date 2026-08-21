@@ -9,11 +9,18 @@ on:
 permissions:
   contents: read
 
+# Supersede in-flight runs for the same ref: a push that lands while the previous
+# run is still going makes that run's result irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     services:
-      # pgvector, not postgres: v1 keeps rows, FTS and kNN in one database.
+      # pgvector, not postgres: v1 keeps rows, FTS and kNN in one database, and
+      # the plain postgres images do not bundle the extension.
       postgres:
         image: pgvector/pgvector:pg17
         env:
@@ -27,11 +34,13 @@ jobs:
     env:
       DATABASE_URL: postgres://devsignal:devsignal@localhost:5432/devsignal?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: '1.26'
+          # Read the version from go.mod rather than restating it here: a
+          # duplicated version silently drifts from the one the code declares.
+          go-version-file: go.mod
           cache: true
 
       - name: verify formatting
@@ -39,29 +48,47 @@ jobs:
           out=$(gofmt -l .)
           if [ -n "$out" ]; then echo "unformatted:"; echo "$out"; exit 1; fi
 
-      - run: go vet ./...
+      # Both tag sets: the integration files only compile under the build tag, so
+      # a plain vet would never look at them.
+      - name: vet
+        run: |
+          go vet ./...
+          go vet -tags integration ./...
 
-      - uses: golangci/golangci-lint-action@v6
+      - name: lint
+        # v9 is required for a golangci-lint v2 config. v6 is built for v1 and
+        # rejects `version: "2"` outright, exiting 3 before it lints anything.
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned, not `latest`: an unpinned linter changes CI results with no
+          # code change. Keep this in step with the Makefile and docs.
+          version: v2.12.2
 
       - name: build
         run: go build ./...
 
-      # -race on the unit suite. It is ~10x slower, so the broader suites stay
-      # on a nightly once they exist.
-      - name: test
+      # -race on the unit suite. It is roughly 10x slower, so the broader suites
+      # stay off the per-push path once they grow.
+      - name: unit tests
         run: go test -race -count=1 ./...
 
       - name: install migrate
         run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
-      # Migrations must survive both directions — rolling deploys depend on it.
+      # Migrations must survive both directions — a rolling deploy runs old and
+      # new code against one schema, so a forward-only migration breaks the
+      # deploy it ships in.
       - name: migrations up, down, up
         run: |
           migrate -path migrations -database "$DATABASE_URL" up
           migrate -path migrations -database "$DATABASE_URL" down -all
           migrate -path migrations -database "$DATABASE_URL" up
+
+      # The guarantees that matter live here: SKIP LOCKED isolation, refresh-token
+      # replay revocation, absence-based closure, dedup precision. Running
+      # migrations without ever querying through them proves very little.
+      - name: integration tests
+        run: go test -tags integration -count=1 -timeout 300s ./...
 
       - name: schema sanity
         run: |
