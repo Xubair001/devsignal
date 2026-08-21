@@ -31,5 +31,3 @@ func numeric(f float64) pgtype.Numeric {
 	// parse_yield_7d is numeric(5,4): store as an integer scaled by 1e4.
 	return pgtype.Numeric{Int: big.NewInt(int64(f * 10000)), Exp: -4, Valid: true}
 }
-
-func strptr(s string) *string { return &s }

@@ -173,7 +173,7 @@ func (q *Queries) FindSourceRow(ctx context.Context, arg FindSourceRowParams) (O
 }
 
 const getSourceByID = `-- name: GetSourceByID :one
-SELECT id, name, tier, type, legal_basis, robots_checked_at, terms_reviewed_at, reviewed_by, rate_limit_rps, poll_interval, etag_supported, status, last_success_at, last_failure_at, last_error, items_discovered, items_processed, parse_yield_7d, created_at, updated_at FROM source WHERE id = $1
+SELECT id, name, tier, type, legal_basis, robots_checked_at, terms_reviewed_at, reviewed_by, rate_limit_rps, poll_interval, etag_supported, status, last_success_at, last_failure_at, last_error, items_discovered, items_processed, parse_yield_7d, created_at, updated_at, consecutive_degraded, last_health_note, platform_review_ref FROM source WHERE id = $1
 `
 
 func (q *Queries) GetSourceByID(ctx context.Context, id pgtype.UUID) (Source, error) {
@@ -200,12 +200,15 @@ func (q *Queries) GetSourceByID(ctx context.Context, id pgtype.UUID) (Source, er
 		&i.ParseYield7d,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConsecutiveDegraded,
+		&i.LastHealthNote,
+		&i.PlatformReviewRef,
 	)
 	return i, err
 }
 
 const getSourceByName = `-- name: GetSourceByName :one
-SELECT id, name, tier, type, legal_basis, robots_checked_at, terms_reviewed_at, reviewed_by, rate_limit_rps, poll_interval, etag_supported, status, last_success_at, last_failure_at, last_error, items_discovered, items_processed, parse_yield_7d, created_at, updated_at FROM source WHERE name = $1
+SELECT id, name, tier, type, legal_basis, robots_checked_at, terms_reviewed_at, reviewed_by, rate_limit_rps, poll_interval, etag_supported, status, last_success_at, last_failure_at, last_error, items_discovered, items_processed, parse_yield_7d, created_at, updated_at, consecutive_degraded, last_health_note, platform_review_ref FROM source WHERE name = $1
 `
 
 func (q *Queries) GetSourceByName(ctx context.Context, name string) (Source, error) {
@@ -232,6 +235,9 @@ func (q *Queries) GetSourceByName(ctx context.Context, name string) (Source, err
 		&i.ParseYield7d,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConsecutiveDegraded,
+		&i.LastHealthNote,
+		&i.PlatformReviewRef,
 	)
 	return i, err
 }
@@ -628,7 +634,7 @@ INSERT INTO source (name, tier, type, legal_basis, poll_interval, etag_supported
                     robots_checked_at, terms_reviewed_at, reviewed_by)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 ON CONFLICT (name) DO UPDATE SET type = EXCLUDED.type
-RETURNING id, name, tier, type, legal_basis, robots_checked_at, terms_reviewed_at, reviewed_by, rate_limit_rps, poll_interval, etag_supported, status, last_success_at, last_failure_at, last_error, items_discovered, items_processed, parse_yield_7d, created_at, updated_at
+RETURNING id, name, tier, type, legal_basis, robots_checked_at, terms_reviewed_at, reviewed_by, rate_limit_rps, poll_interval, etag_supported, status, last_success_at, last_failure_at, last_error, items_discovered, items_processed, parse_yield_7d, created_at, updated_at, consecutive_degraded, last_health_note, platform_review_ref
 `
 
 type UpsertSourceParams struct {
@@ -677,6 +683,9 @@ func (q *Queries) UpsertSource(ctx context.Context, arg UpsertSourceParams) (Sou
 		&i.ParseYield7d,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConsecutiveDegraded,
+		&i.LastHealthNote,
+		&i.PlatformReviewRef,
 	)
 	return i, err
 }

@@ -39,18 +39,21 @@ import (
 )
 
 func main() {
-	role := flag.String("role", "api", "api | worker | ingest-once | add-source | digest | admin")
+	role := flag.String("role", "api",
+		"api | worker | ingest-once | add-source | add-sources | source-health | digest | admin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
+	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
+	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
 	flag.Parse()
 
-	if err := run(*role, *srcName); err != nil {
+	if err := run(*role, *srcName, *srcFile, *reviewer); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(role, srcName string) error {
+func run(role, srcName, srcFile, reviewer string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -98,6 +101,10 @@ func run(role, srcName string) error {
 		return addSource(ctx, log, pool, srcName)
 	case "ingest-once":
 		return ingestOnce(ctx, log, pool, srcName)
+	case "add-sources":
+		return addSources(ctx, log, pool, srcFile, reviewer)
+	case "source-health":
+		return sourceHealthReport(ctx, pool)
 	case "digest", "admin":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
@@ -366,4 +373,133 @@ func ingestOnce(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, name 
 		"closed", res.Closed, "not_modified", res.NotModified,
 		"yield", res.ParseYield())
 	return nil
+}
+
+// addSources registers many boards at once.
+//
+// The reviewable unit for Tier A is the ATS PLATFORM, not each company board:
+// every Greenhouse board is the same documented public endpoint pattern, so
+// reviewing one company's board tells you nothing the platform review did not.
+// --reviewed-by is therefore required and recorded on every row, so a bulk
+// import is attributable rather than anonymous.
+func addSources(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, path, reviewer string) error {
+	if path == "" {
+		return fmt.Errorf("--file is required, one \"<family>:<config>\" per line")
+	}
+	if reviewer == "" {
+		return fmt.Errorf("--reviewed-by is required: a bulk import must be attributable")
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	q := store.New(pool)
+	client := sourceClient()
+	var added, skipped int
+	seen := map[string]bool{}
+
+	for i, line := range strings.Split(string(raw), "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" || strings.HasPrefix(name, "#") {
+			continue
+		}
+		if seen[name] {
+			continue // a duplicated line is not an error, just nothing to do
+		}
+		seen[name] = true
+
+		family, cfg, ok := strings.Cut(name, ":")
+		if !ok || cfg == "" {
+			log.Warn("skipping malformed line", "line", i+1, "value", name)
+			skipped++
+			continue
+		}
+		// Refuse to register anything we cannot actually poll. An unbuildable
+		// source would sit in the registry looking active and fetch nothing.
+		if _, err := source.Build(family, source.Options{
+			Config: map[string]string{"board_token": cfg}, Client: client,
+		}); err != nil {
+			log.Warn("skipping: no usable adapter", "source", name, "err", err)
+			skipped++
+			continue
+		}
+
+		platformRef := family + " public board API, reviewed by " + reviewer
+		src, err := q.UpsertSource(ctx, store.UpsertSourceParams{
+			Name: name, Tier: "a", Type: family + "_public_board_api",
+			LegalBasis:    "public, documented, unauthenticated board API intended for third-party consumption",
+			PollInterval:  pgtype.Interval{Microseconds: (5 * time.Minute).Microseconds(), Valid: true},
+			EtagSupported: true,
+		})
+		if err != nil {
+			return fmt.Errorf("registering %s: %w", name, err)
+		}
+		if err := q.SetSourceReview(ctx, store.SetSourceReviewParams{
+			ID: src.ID, ReviewedBy: &reviewer, PlatformReviewRef: &platformRef,
+		}); err != nil {
+			return fmt.Errorf("recording review for %s: %w", name, err)
+		}
+		if err := q.UpsertSourceSchedule(ctx, store.UpsertSourceScheduleParams{
+			SourceID: src.ID, Cursor: []byte("{}"),
+		}); err != nil {
+			return fmt.Errorf("scheduling %s: %w", name, err)
+		}
+		added++
+	}
+
+	log.Info("bulk source registration complete",
+		"added", added, "skipped", skipped, "reviewed_by", reviewer)
+	if added == 0 {
+		return fmt.Errorf("no sources registered from %s", path)
+	}
+	return nil
+}
+
+// sourceHealthReport prints today against each source's own baseline. Absolute
+// numbers are shown alongside the rates because a rate over a tiny sample is
+// what a fixed threshold would have alerted on.
+func sourceHealthReport(ctx context.Context, pool *pgxpool.Pool) error {
+	rows, err := store.New(pool).SourceHealthReport(ctx)
+	if err != nil {
+		return fmt.Errorf("health report: %w", err)
+	}
+	if len(rows) == 0 {
+		fmt.Println("no sources registered")
+		return nil
+	}
+
+	fmt.Printf("%-26s %-6s %-12s %5s %8s %8s %8s  %s\n",
+		"SOURCE", "TIER", "STATUS", "DEGR", "SEEN", "YIELD", "LOC%", "NOTE")
+	for _, r := range rows {
+		yield, loc := "-", "-"
+		if r.TodaySeen > 0 {
+			yield = fmt.Sprintf("%.0f%%", 100*float64(r.TodayUsable)/float64(r.TodaySeen))
+			loc = fmt.Sprintf("%.0f%%", 100*float64(r.TodayWithLocation)/float64(r.TodaySeen))
+		}
+		// Baseline shown next to today's figure: the drop is the signal, not the
+		// level. 71% looks fine until you see it used to be 98%.
+		base := ""
+		if r.BaselineSeen > 0 {
+			base = fmt.Sprintf(" (was %.0f%% / %.0f%%)",
+				100*float64(r.BaselineUsable)/float64(r.BaselineSeen),
+				100*float64(r.BaselineWithLocation)/float64(r.BaselineSeen))
+		}
+		note := ""
+		if r.LastHealthNote != nil {
+			note = *r.LastHealthNote
+		}
+		fmt.Printf("%-26s %-6s %-12s %5d %8d %8s %8s  %s%s\n",
+			trunc(r.Name, 26), r.Tier, r.Status, r.ConsecutiveDegraded,
+			r.TodaySeen, yield, loc, note, base)
+	}
+	return nil
+}
+
+func trunc(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }

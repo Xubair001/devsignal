@@ -235,26 +235,45 @@ type SkillEdge struct {
 }
 
 type Source struct {
-	ID              pgtype.UUID
-	Name            string
-	Tier            string
-	Type            string
-	LegalBasis      string
-	RobotsCheckedAt pgtype.Timestamptz
-	TermsReviewedAt pgtype.Timestamptz
-	ReviewedBy      *string
-	RateLimitRps    pgtype.Numeric
-	PollInterval    pgtype.Interval
-	EtagSupported   bool
-	Status          string
-	LastSuccessAt   pgtype.Timestamptz
-	LastFailureAt   pgtype.Timestamptz
-	LastError       *string
-	ItemsDiscovered int64
-	ItemsProcessed  int64
-	ParseYield7d    pgtype.Numeric
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	ID                  pgtype.UUID
+	Name                string
+	Tier                string
+	Type                string
+	LegalBasis          string
+	RobotsCheckedAt     pgtype.Timestamptz
+	TermsReviewedAt     pgtype.Timestamptz
+	ReviewedBy          *string
+	RateLimitRps        pgtype.Numeric
+	PollInterval        pgtype.Interval
+	EtagSupported       bool
+	Status              string
+	LastSuccessAt       pgtype.Timestamptz
+	LastFailureAt       pgtype.Timestamptz
+	LastError           *string
+	ItemsDiscovered     int64
+	ItemsProcessed      int64
+	ParseYield7d        pgtype.Numeric
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	ConsecutiveDegraded int32
+	LastHealthNote      *string
+	PlatformReviewRef   *string
+}
+
+type SourceHealthDaily struct {
+	SourceID       pgtype.UUID
+	Day            pgtype.Date
+	Polls          int32
+	PollFailures   int32
+	NotModified    int32
+	PostingsSeen   int32
+	PostingsUsable int32
+	WithCompany    int32
+	WithLocation   int32
+	WithApplyUrl   int32
+	WithLanguage   int32
+	WithSalary     int32
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SourceSchedule struct {

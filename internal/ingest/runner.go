@@ -14,12 +14,6 @@ import (
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
-// QuarantineYieldFloor is the parse yield below which a source is quarantined.
-//
-// Alerting on a relative drop is what catches parser rot: a source that fell
-// from 98% to 71% field completeness is broken even though nothing errored.
-const QuarantineYieldFloor = 0.80
-
 // Runner polls due sources. There is no scheduler process — schedules are rows
 // claimed with SKIP LOCKED, so no single point of failure and no double-firing.
 type Runner struct {
@@ -116,8 +110,10 @@ func (r *Runner) execute(ctx context.Context, src store.Source, cursorJSON []byt
 	res, next, err := r.svc.RunSource(ctx, src.ID, adapter, cur)
 	if err != nil {
 		r.recordFailure(ctx, src.ID, err)
+		r.recordHealth(ctx, src.ID, res, true)
 		return res, err
 	}
+	r.recordHealth(ctx, src.ID, res, false)
 
 	if res.NotModified {
 		// A 304 is a successful poll: reachable and unchanged.
@@ -140,17 +136,9 @@ func (r *Runner) execute(ctx context.Context, src store.Source, cursorJSON []byt
 		r.log.Warn("recording source success", "err", err)
 	}
 
-	// Quarantine on a yield collapse rather than on an error: keep serving the
-	// last good data and page a human.
-	if res.Fetched > 0 && yield < QuarantineYieldFloor {
-		r.log.Error("quarantining source on parse-yield collapse",
-			"source", src.Name, "yield", yield, "floor", QuarantineYieldFloor)
-		if qerr := r.q.QuarantineSource(ctx, store.QuarantineSourceParams{
-			ID: src.ID, LastError: strptr(fmt.Sprintf("parse yield %.3f below floor %.2f", yield, QuarantineYieldFloor)),
-		}); qerr != nil {
-			r.log.Warn("quarantining", "err", qerr)
-		}
-	}
+	// Quarantine is decided by recordHealth against this source's own baseline,
+	// not by an absolute floor. A floor cannot see the failure that matters: a
+	// source dropping from 98% to 71% completeness passes any fixed threshold.
 
 	if err := r.q.SaveSourceCursor(ctx, store.SaveSourceCursorParams{
 		ID: src.ID, Cursor: encodeCursor(next),

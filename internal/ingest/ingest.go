@@ -28,15 +28,26 @@ import (
 const MaxConsecutiveMisses = 2
 
 type Result struct {
-	Fetched     int
-	Created     int
-	Updated     int
-	Unchanged   int
-	Skipped     int
-	Missed      int64
-	Closed      int64
+	Fetched   int
+	Created   int
+	Updated   int
+	Unchanged int
+	Skipped   int
+	Missed    int64
+	Closed    int64
+
+	// Fill counts feed source-health monitoring. Parser rot shows up here rather
+	// than in the error rate: rows keep arriving with fields quietly empty.
+	WithCompany  int
+	WithLocation int
+	WithApplyURL int
+	WithLanguage int
+
 	NotModified bool
 }
+
+// Usable is the number of postings that produced a record.
+func (r Result) Usable() int { return r.Created + r.Updated + r.Unchanged }
 
 // ParseYield is the fraction of fetched documents that produced a usable record.
 // Monitoring this rather than error rate is what catches parser rot: the failure
@@ -93,6 +104,21 @@ func (s *Service) RunSource(ctx context.Context, sourceID pgtype.UUID, a source.
 				res.Skipped++
 				continue
 			}
+			// Counted before the upsert so a storage failure does not distort the
+			// parser's own fill rate — this measures the PARSER, not the write.
+			if p.CompanyName != "" {
+				res.WithCompany++
+			}
+			if p.LocationRaw != "" {
+				res.WithLocation++
+			}
+			if p.ApplyURL != "" {
+				res.WithApplyURL++
+			}
+			if p.Language != "" {
+				res.WithLanguage++
+			}
+
 			outcome, uerr := s.upsert(ctx, sourceID, a, p, next.ETag)
 			if uerr != nil {
 				res.Skipped++
