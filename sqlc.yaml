@@ -1,0 +1,16 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: internal/store/query
+    gen:
+      go:
+        package: store
+        out: internal/store
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_prepared_queries: false   # off: PgBouncer transaction pooling
+        emit_json_tags: false          # DTOs live at the HTTP boundary, not here
+        overrides:
+          - db_type: "vector"
+            go_type: "github.com/pgvector/pgvector-go.Vector"

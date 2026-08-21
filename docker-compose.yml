@@ -1,0 +1,65 @@
+# Local development stack. Production topology is blueprint §22.
+# pgvector image is required, not interchangeable with postgres:* — the plain
+# images do not bundle the vector extension, and v1 keeps rows, FTS and kNN in
+# one database (blueprint §23).
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: devsignal
+      POSTGRES_PASSWORD: devsignal
+      POSTGRES_DB: devsignal
+      # every stage claims work with a bounded query; a runaway one should die,
+      # not hold a connection. matches the server-side ceiling in the Go skill.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - statement_timeout=30s
+      - -c
+      - idle_in_transaction_session_timeout=60s
+      - -c
+      - max_connections=200
+      - -c
+      - log_min_duration_statement=500ms
+    ports: ["${POSTGRES_PORT:-65432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devsignal -d devsignal"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    # sessions, rate limits and per-host token buckets only. never the source of
+    # truth, and never used for correctness locking (blueprint §25).
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports: ["${REDIS_PORT:-65379}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    # raw source documents, resumes, parsed artifacts. large bodies stay out of
+    # the hot table so the working set fits in memory.
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: devsignal
+      MINIO_ROOT_PASSWORD: devsignal123
+    ports: ["${MINIO_PORT:-65000}:9000", "${MINIO_CONSOLE_PORT:-65001}:9001"]
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  miniodata:

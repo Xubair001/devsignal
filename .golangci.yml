@@ -1,0 +1,26 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  enable:
+    - errcheck        # an unchecked error is how silent data loss starts
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose       # a leaked response body leaks a connection
+    - contextcheck    # every call must carry the context
+    - errorlint       # %w, not %v
+    - noctx           # no HTTP request without a context
+    - rowserrcheck
+    - sqlclosecheck
+    - nilerr
+    - goconst
+    - misspell
+formatters:
+  enable:
+    - gofmt
+    - goimports
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

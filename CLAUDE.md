@@ -1,0 +1,243 @@
+# CLAUDE.md
+
+Contributor-facing guidance for working in this repo. The binding specification is
+[docs/DevSignal-Product-and-Architecture-Blueprint.docx](docs/DevSignal-Product-and-Architecture-Blueprint.docx) —
+read it before changing anything structural. Where this file and the blueprint disagree, the
+blueprint wins and this file is stale.
+
+## Status
+
+**Blueprint §35 steps 2–4 are done.** Repo, CI, local stack, config/logging/tracing skeleton, and
+the canonical schema. Nothing ingests yet.
+
+Next: step 5 (identity) then step 6 (queue + state machine + sweeper). Step 7 (first adapter) is
+gated on the Tier-A source list below. Do not skip ahead because a later step looks easier — the
+order is dependency-ordered, not thematic.
+
+Four decisions are still open and are tracked in blueprint §33.3. Do not code around them:
+
+| Open item | Blocks |
+|-----------|--------|
+| EU AI Act classification opinion for the recommender | EU launch, not development |
+| Final Tier-A source list with per-source review | Adapter build (not the schema) |
+| Backup erasure approach: crypto-shredding vs stated window | Privacy notice wording |
+| Email consent basis and sending domain setup | First digest send |
+
+## Project (WHAT / WHY)
+
+**Developer Opportunity Intelligence.** Not a job board and not an aggregator — an explainable
+recommender over a corpus we keep *true*. The product answers four questions in order: what should I
+apply to, why, what am I missing, and what should I do to become more competitive. The fourth is the
+moat, and it needs longitudinal demand data that cannot be backfilled.
+
+Two constraints shape every engineering decision:
+
+- **The corpus is small and dirty.** ~200–500K live developer-relevant postings worldwide — the
+  whole scoreable corpus fits in one process's memory. But an estimated 20–33% of online listings are
+  ghosts, so *verified liveness is the product*, not data hygiene. Difficulty here is data quality
+  and evaluation, never scale.
+- **Trust is the only asset.** It is lost by one invented field, not by a missing one. See Hard rule 3.
+
+## Repo map (HOW)
+
+Planned structure per blueprint §37.1. One binary; the role is selected by flag.
+
+| Path | What lives here |
+|------|-----------------|
+| `cmd/devsignal/` | The single binary. `--role=api\|worker\|digest\|admin` |
+| `internal/source/` | `SourceAdapter` implementations + the registry. One package per source family |
+| `internal/pipeline/` | Work queue, state machine, sweeper, leases. The spine every worker plugs into |
+| `internal/opportunity/` | Canonical model, provenance, normalization, dedup, liveness |
+| `internal/company/` | Entity resolution on registrable domain, alias table |
+| `internal/skill/` | Ontology, aliases, edges, demand time-series writes |
+| `internal/enrich/` | Extraction, embeddings, the content-hash cache, hot/cold lanes |
+| `internal/matching/` | Eligibility gate, retrieval, fit scoring, explanation |
+| `internal/engagement/` | Feed, saves, applications, dismissals |
+| `internal/digest/` | Notification budget, quiet hours, the empty case |
+| `internal/auth/`, `internal/profile/` | Identity, sessions, tenancy, resume ingestion |
+| `internal/admin/` | Source health, merge/unmerge, quarantine, flag queue |
+| `internal/eval/` | Evaluation harness + labelled fixtures. Gates scoring changes in CI |
+| `pkg/` | logger, telemetry, middleware, clients. Nothing domain-specific |
+| `migrations/` | golang-migrate. Never hand-write DDL outside a migration |
+| `testdata/` | Recorded source payloads (golden files). The highest-value tests in the repo |
+| `docs/` | The blueprint, ADRs, runbooks |
+
+No `proto/` and no per-service repos until a blueprint §36 trigger fires.
+
+## Hard rules (would-be reverts)
+
+Non-negotiable. Don't break them without raising it first. Each one maps to a specific failure the
+blueprint's audit found.
+
+1. **Money is `int64` minor units + ISO-4217 currency + period.** Never `float`. A range needs
+   `salary_min_minor` *and* `salary_max_minor`. Anything normalized across currencies stores its
+   `fx_rate_date`.
+
+2. **No score shown to a user may depend on the current time.** `fit_score` is a pure function of
+   `(profile_version, opportunity_version, model_version)` — cacheable, reproducible, explainable.
+   Recency, urgency and saturation live in `priority_score`, which orders the feed and is **never**
+   displayed as a match. Putting freshness back inside fit reintroduces four bugs at once.
+
+3. **Nothing renders that cannot be derived from observed data.** No competitiveness estimate (we
+   have no applicant counts), no imputed salary presented as the employer's, no bare match
+   percentage implying a probability. Bands and factor contributions until calibration exists, then
+   percentiles. Blueprint §3 is binding on the UI.
+
+4. **Never `http.DefaultClient`.** One explicit client per source tier, with dial / TLS /
+   response-header / total timeouts, `MaxConnsPerHost`, a per-host token bucket, and every body read
+   through `io.LimitReader` with a hard cap. Untrusted remote content is the most reliable way to
+   kill a Go service.
+
+5. **Never create an account, authenticate, or accept terms on a source we ingest.** This is the
+   single rule that separates our legal posture from hiQ's. Tier A and B only; see blueprint §12.
+
+6. **The DB row is the truth; events are a latency optimization.** Every stage claims work by
+   `pipeline_state` with `FOR UPDATE SKIP LOCKED`, is idempotent, advances state in the *same*
+   transaction as the work, and holds a lease. Losing an event must cost seconds, never data.
+
+7. **No stage may block another.** Enrichment failure must not prevent a posting reaching `ready`
+   with a degraded quality flag. A posting with no extracted skills is still better than an
+   invisible posting.
+
+8. **Never call the model when the extraction cache would hit.** Key is
+   `(content_hash, prompt_version, model_id, schema_version)`. This is the determinism guarantee, not
+   just a cost saving — re-extracting makes fit scores flap for postings that did not change.
+
+9. **Closure requires a successful poll in which the posting was absent.** Never infer closure from a
+   failed fetch, a timeout, or a quarantined source. That mistake lets one source outage delete the
+   corpus.
+
+10. **Everything a score depends on carries its version.** Ontology, model, prompt, schema, embedding
+    and weights versions are written on the artifact. A model swap without a version column is an
+    un-migratable rebuild.
+
+11. **Merges are reversible.** Dedup writes a canonical `opportunity` and keeps every
+    `opportunity_source` row with `merge_reason` and `merge_confidence`. Never delete a source row. A
+    false merge hides a real job and is otherwise invisible.
+
+12. **Metrics carry bounded labels only** — `source_id`, `pipeline_stage`, `status`,
+    `http_status_class`, `model_id`. `user_id` and `opportunity_id` go in trace attributes and log
+    fields, never metric labels. One series per opportunity is unbounded cardinality.
+
+13. **No PII in logs, ever.** Not in errors, not in debug, not "temporarily".
+
+14. **Domain logic takes time from an injected `Clock`.** Never `time.Now()` inside freshness,
+    expiry, liveness or lease logic — it is untestable otherwise. All timestamps `timestamptz`, UTC.
+
+15. **Migrations are expand/contract.** Nullable add + batched backfill, `CREATE INDEX
+    CONCURRENTLY`, never a blocking `ALTER` on a hot table. Rolling deploys must survive both
+    directions.
+
+16. **Any change touching scoring, retrieval or extraction must pass `make eval`.** CI fails on
+    NDCG@10 regression. Weight changes are not a matter of taste.
+
+17. **Every new user-derived artifact is added to the erasure inventory in the same change.**
+    Embeddings, index documents, caches, exports, warehouse copies. Blueprint §31.2 lists the
+    locations; the completeness script must still pass.
+
+18. **`pgx` directly, no ORM.** `sqlc` for static queries; a query builder only for the faceted
+    search endpoint. Do not contort `sqlc` and do not adopt an ORM to solve one endpoint.
+
+19. **Do not add NATS, OpenSearch or Kubernetes until its blueprint §36 trigger fires.** They are
+    earned migrations with a measurement attached, not starting conditions. v1 is Postgres + Redis.
+
+## The two numbers
+
+The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
+
+```
+fit_score        stable    f(profile_v, opportunity_v, model_v)
+                           cached; invalidated only by a version change
+                           displayed, with per-factor contributions
+
+priority_score   volatile  g(fit, age, closing_soon, saturation)
+                           computed at read time; orders today's feed
+                           never displayed, never persisted as a match
+```
+
+Fit is a weighted sum over bounded factors whose weights total 1, so each term contributes exactly
+`w_i * f_i` — the explanation *is* the model. Keep it linear and monotone; that is what makes the
+displayed breakdown faithful rather than a post-hoc story.
+
+## Pipeline
+
+```
+discovered -> fetched -> parsed -> normalized -> deduped -> enriched -> embedded -> ready
+                                        |
+                                        v
+                                 failed_permanent  (visible in a queue, never lost)
+```
+
+A sweeper re-enqueues anything stuck past its stage threshold, forever. The state distribution *is*
+the pipeline dashboard:
+
+```sql
+SELECT pipeline_state, count(*), min(updated_at)
+  FROM opportunity WHERE pipeline_state <> 'ready' GROUP BY 1;
+-- an old min(updated_at) means something is stranded. alert on it.
+```
+
+## Source policy
+
+| Tier | What qualifies | Posture |
+|------|----------------|---------|
+| A — Sanctioned | Public ATS job-board APIs, official APIs, RSS/Atom, sitemaps, partner feeds | Build here first. Target ~80% of corpus |
+| B — Permitted crawl | Public pages, robots-allowed, no login wall, no click-through terms, polite rate | Per-source review + recorded legal basis |
+| C — Prohibited | Behind a login, terms forbid automated access, needs an account, actively enforced | Do not ingest |
+
+Tier A is load-bearing, not merely safe: `(ats_type, ats_job_id)` is a stable global identifier, so
+dedup is nearly free; the parsing surface collapses to JSON; and conditional GETs are cheap enough to
+make the 5-minute freshness SLO real.
+
+## Prerequisites
+
+Verify with `./scripts/check-prereqs.sh`. Current machine state is recorded in
+[docs/PREREQUISITES.md](docs/PREREQUISITES.md).
+
+Local host ports are deliberately **off the defaults** — this machine already runs a native
+redis on 6379 and other projects' databases on 5432/55432. Postgres 65432, Redis 65379,
+MinIO 65000/65001; override with `POSTGRES_PORT` etc. in `.env`.
+
+| Tool | Needed | Why this version |
+|------|--------|------------------|
+| Go | **≥ 1.25** | 1.25 made `GOMAXPROCS` container-aware from the cgroup CPU limit. Do **not** set `GOMAXPROCS` in a manifest — it overrides the correct value. Still set `GOMEMLIMIT` to ~90% of the memory limit |
+| PostgreSQL | ≥ 16, with `pgvector` | Rows, FTS (`tsvector`) and kNN all live here in v1 |
+| Docker + Compose | any current | Local Postgres, Redis, MinIO, OTel collector |
+| golang-migrate | any current | Migrations |
+| sqlc | any current | Static query codegen |
+| golangci-lint, staticcheck | any current | CI gates |
+
+## Adding things
+
+- **A source** → use the `add-source-adapter` skill. Never hand-roll the HTTP client or skip the
+  golden fixture.
+- **A pipeline stage** → use the `pipeline-stage` skill. Claim by state, idempotent, lease, advance
+  in-transaction.
+- **A scoring factor or weight** → use the `scoring-change` skill. It will not merge without the
+  eval harness.
+- **A migration** → use the `db-migration` skill. Expand/contract only.
+- **Anything storing user-derived data** → use the `privacy-surface` skill. The erasure inventory is
+  part of the change.
+- **An API endpoint, service or store method** → use the `backend-api-conventions` skill. Layering,
+  DTO boundaries, error mapping, keyset pagination.
+- **Any Go service code** → the `go-production-patterns` skill has the concrete shapes for HTTP
+  clients, bounded concurrency, graceful drain and pool sizing.
+- **Any UI** → use the `frontend-conventions` skill. It carries the binding display rules: never
+  render a raw percentage, never invent a signal, always show verified-open state.
+
+## Verifying changes
+
+```bash
+make fmt vet lint          # gofmt, go vet, golangci-lint, staticcheck
+make test                  # unit, with -race
+make test-golden           # source parser fixtures — the ones that catch real breakage
+make eval                  # NDCG@10 / Precision@7 / coverage. Gates scoring changes
+make test-integration      # Postgres + Redis via Compose
+make check-erasure         # asserts a deleted identifier appears nowhere
+```
+
+Before calling anything done, walk blueprint §38's production readiness gate. It is binary.
+
+## Branches
+
+`main` ← PRs from `dev` ← feature branches. Never push to `main` directly.

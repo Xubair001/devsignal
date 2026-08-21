@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS source_schedule;
+DROP TABLE IF EXISTS source;

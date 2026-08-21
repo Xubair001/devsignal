@@ -1,0 +1,28 @@
+# binaries
+/bin/
+/devsignal
+*.exe
+
+# go
+*.test
+*.out
+coverage.*
+vendor/
+
+# env — .env.example is committed, .env is not
+.env
+.env.local
+
+# local data
+/data/
+*.log
+
+# editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# claude local overrides (settings.json IS committed)
+.claude/settings.local.json
+.claude/worktrees/

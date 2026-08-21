@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      # pgvector, not postgres: v1 keeps rows, FTS and kNN in one database.
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: devsignal
+          POSTGRES_PASSWORD: devsignal
+          POSTGRES_DB: devsignal
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U devsignal -d devsignal"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://devsignal:devsignal@localhost:5432/devsignal?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: verify formatting
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "unformatted:"; echo "$out"; exit 1; fi
+
+      - run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: build
+        run: go build ./...
+
+      # -race on the unit suite. It is ~10x slower, so the broader suites stay
+      # on a nightly once they exist.
+      - name: test
+        run: go test -race -count=1 ./...
+
+      - name: install migrate
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+      # Migrations must survive both directions — rolling deploys depend on it.
+      - name: migrations up, down, up
+        run: |
+          migrate -path migrations -database "$DATABASE_URL" up
+          migrate -path migrations -database "$DATABASE_URL" down -all
+          migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: schema sanity
+        run: |
+          psql "$DATABASE_URL" -c "\dt"
+          psql "$DATABASE_URL" -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';"
