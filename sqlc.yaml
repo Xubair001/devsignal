@@ -12,5 +12,10 @@ sql:
         emit_prepared_queries: false   # off: PgBouncer transaction pooling
         emit_json_tags: false          # DTOs live at the HTTP boundary, not here
         overrides:
+          # Structured form is required: the import path basename contains a
+          # hyphen, so the string form emits an invalid Go identifier.
           - db_type: "vector"
-            go_type: "github.com/pgvector/pgvector-go.Vector"
+            go_type:
+              import: "github.com/pgvector/pgvector-go"
+              package: "pgvector"
+              type: "Vector"

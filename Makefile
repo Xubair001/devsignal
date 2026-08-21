@@ -97,8 +97,8 @@ test-golden: ## [step 7] source parser fixture tests
 	@echo "not built yet — arrives with the first source adapter (blueprint §35 step 7)"; exit 1
 
 .PHONY: test-integration
-test-integration: ## [step 6] postgres + redis integration tests
-	@echo "not built yet — arrives with the queue and state machine (blueprint §35 step 6)"; exit 1
+test-integration: ## integration tests against the real stack (needs make up)
+	DATABASE_URL="$(DB_URL)" go test -tags integration -count=1 -timeout 300s ./...
 
 .PHONY: eval
 eval: ## [step 16] ranking evaluation harness — gates scoring changes

@@ -19,8 +19,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
+	"github.com/Xubair001/devsignal/internal/pipeline"
 	"github.com/Xubair001/devsignal/pkg/logger"
 	"github.com/Xubair001/devsignal/pkg/telemetry"
 )
@@ -78,8 +81,10 @@ func run(role string) error {
 	switch role {
 	case "api":
 		return serveAPI(ctx, cfg, log, pool)
-	case "worker", "digest", "admin":
-		return fmt.Errorf("role %q is not implemented yet: the pipeline arrives at step 6 of the blueprint's §35 order", role)
+	case "worker":
+		return runWorkers(ctx, log, pool)
+	case "digest", "admin":
+		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
 	}
@@ -140,6 +145,28 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		_, _ = w.Write([]byte("ready"))
 	})
 
+	authSvc := auth.NewService(pool, log, auth.DefaultPolicy(), nil)
+	authH := auth.NewHandler(authSvc, log)
+
+	r.Route("/api/v1", func(api chi.Router) {
+		api.Mount("/auth", authH.Routes())
+		// Everything below requires a live session. Scoping is enforced here and
+		// in the query, never per handler.
+		api.Group(func(priv chi.Router) {
+			priv.Use(authH.Authenticator)
+			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
+				id, ok := auth.FromContext(req.Context())
+				if !ok {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"user_id":%q,"tenant_id":%q}`,
+					id.UserID.String(), id.TenantID.String())
+			})
+		})
+	})
+
 	// Trace real requests, not health probes — kubelet polling would otherwise
 	// dominate the trace volume and tell you nothing.
 	handler := otelhttp.NewHandler(r, "http",
@@ -183,5 +210,64 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		return fmt.Errorf("http shutdown: %w", err)
 	}
 	log.Info("drained cleanly")
+	return nil
+}
+
+// runWorkers starts one worker per pipeline stage plus the sweeper.
+//
+// Handlers are placeholders until their step: each stage currently just passes
+// the record through so the spine is exercisable end to end. Replacing a
+// placeholder is the whole of that step's work.
+func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error {
+	cfg := pipeline.DefaultConfig()
+	queue := pipeline.NewQueue(pool, cfg, log)
+
+	passthrough := func(context.Context, pipeline.Item) error { return nil }
+
+	// Concurrency per stage is set independently — that is the whole point of
+	// separating them (blueprint §25). AI work will be the bottleneck, not fetch.
+	stages := []pipeline.Stage{
+		{State: pipeline.StateDiscovered, Concurrency: 4, Handle: passthrough},
+		{State: pipeline.StateFetched, Concurrency: 8, Handle: passthrough},
+		{State: pipeline.StateParsed, Concurrency: 8, Handle: passthrough},
+		{State: pipeline.StateNormalized, Concurrency: 4, Handle: passthrough},
+		{State: pipeline.StateDeduped, Concurrency: 4, Handle: passthrough},
+		{State: pipeline.StateEnriched, Concurrency: 2, Handle: passthrough},
+		{State: pipeline.StateEmbedded, Concurrency: 2, Handle: passthrough},
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
+	for _, st := range stages {
+		w := pipeline.NewWorker(queue, st, log)
+		g.Go(func() error { return w.Run(gctx) })
+	}
+	sweeper := pipeline.NewSweeper(queue, log)
+	g.Go(func() error { return sweeper.Run(gctx) })
+
+	// Periodic stats: the state distribution IS the pipeline dashboard.
+	g.Go(func() error {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-gctx.Done():
+				return nil
+			case <-t.C:
+				rows, err := queue.Stats(gctx)
+				if err != nil {
+					continue
+				}
+				for _, r := range rows {
+					log.Info("pipeline", "state", r.PipelineState, "count", r.Total)
+				}
+			}
+		}
+	})
+
+	log.Info("workers running", "stages", len(stages))
+	if err := g.Wait(); err != nil {
+		return fmt.Errorf("workers: %w", err)
+	}
+	log.Info("workers drained cleanly")
 	return nil
 }

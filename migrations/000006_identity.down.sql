@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS user_token;
+DROP TABLE IF EXISTS refresh_token;
+DROP TABLE IF EXISTS user_session;
+DROP TABLE IF EXISTS app_user;
+DROP TABLE IF EXISTS tenant;
