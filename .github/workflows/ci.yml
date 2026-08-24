@@ -120,6 +120,13 @@ jobs:
       - name: integration tests
         run: make test-integration DB_URL="$DATABASE_URL"
 
+      # The gate hard rule 16 refers to. It runs the real retrieval, gate and
+      # scorer against a frozen corpus and label set, so a scoring change that
+      # quietly makes ranking worse fails here rather than in production. Verified
+      # to fail: breaking the domain factor drops NDCG@10 by 0.305.
+      - name: eval gate
+        run: make eval DB_URL="$DATABASE_URL"
+
       - name: schema sanity
         run: |
           psql "$DATABASE_URL" -c "\dt"

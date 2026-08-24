@@ -11,6 +11,15 @@
 -- Nothing here ranks. Ordering inside a channel only decides what survives the
 -- cap; the fit score in step 15 is the only thing that ranks.
 
+-- Every predicate below treats UNSTATED source data as passing, matching the
+-- eligibility gate. Retrieval originally required the field to equal the user's
+-- preference, which excluded any posting whose employer had not said — 26 of 286
+-- in the eval corpus for work mode alone. The eval harness surfaced it as missing
+-- retrieval coverage, and it was invisible before that because a posting nobody
+-- retrieves looks identical to a posting that does not exist.
+--
+-- A filter that nothing can satisfy is not a stricter filter, it is a bug.
+
 -- name: RetrieveByVector :many
 -- Channel 1: nearest neighbours to the profile vector among eligible postings.
 --
@@ -36,12 +45,16 @@ SELECT o.id,
    -- everything. Postgres has no "match anything" array, so each predicate is
    -- written as "unconstrained OR matches".
    AND (cardinality(sqlc.arg(countries)::char(2)[]) = 0
+        -- Unstated location passes, exactly as the eligibility gate treats it.
+        OR o.location_country IS NULL
         OR o.location_country = ANY (sqlc.arg(countries)::char(2)[])
         -- A remote posting is not excluded by a country filter: its location is
         -- a formality, and dropping it would hide the roles remote-seeking users
         -- most want.
         OR o.work_mode = 'remote')
    AND (sqlc.narg(work_mode)::text IS NULL
+        -- Unstated work mode passes, as the gate does.
+        OR o.work_mode IS NULL
         OR o.work_mode = sqlc.narg(work_mode)::text
         -- Asking for remote accepts hybrid; asking for hybrid does not accept
         -- onsite. The asymmetry is the point: hybrid is a superset of remote days.
@@ -86,9 +99,13 @@ SELECT o.id,
    AND to_tsvector('english', coalesce(o.title_normalized, ''))
        @@ websearch_to_tsquery('english', sqlc.arg(terms)::text)
    AND (cardinality(sqlc.arg(countries)::char(2)[]) = 0
+        -- Unstated location passes, exactly as the eligibility gate treats it.
+        OR o.location_country IS NULL
         OR o.location_country = ANY (sqlc.arg(countries)::char(2)[])
         OR o.work_mode = 'remote')
    AND (sqlc.narg(work_mode)::text IS NULL
+        -- Unstated work mode passes, as the gate does.
+        OR o.work_mode IS NULL
         OR o.work_mode = sqlc.narg(work_mode)::text
         OR (sqlc.narg(work_mode)::text = 'hybrid' AND o.work_mode = 'remote'))
    AND (cardinality(sqlc.arg(employment_types)::text[]) = 0
@@ -111,9 +128,13 @@ SELECT count(*)
    AND o.merged_into IS NULL
    AND o.closed_at IS NULL
    AND (cardinality(sqlc.arg(countries)::char(2)[]) = 0
+        -- Unstated location passes, exactly as the eligibility gate treats it.
+        OR o.location_country IS NULL
         OR o.location_country = ANY (sqlc.arg(countries)::char(2)[])
         OR o.work_mode = 'remote')
    AND (sqlc.narg(work_mode)::text IS NULL
+        -- Unstated work mode passes, as the gate does.
+        OR o.work_mode IS NULL
         OR o.work_mode = sqlc.narg(work_mode)::text
         OR (sqlc.narg(work_mode)::text = 'hybrid' AND o.work_mode = 'remote'))
    AND (cardinality(sqlc.arg(employment_types)::text[]) = 0

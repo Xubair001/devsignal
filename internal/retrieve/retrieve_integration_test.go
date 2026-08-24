@@ -597,3 +597,40 @@ func seedProfileWithVector(t *testing.T, pool *pgxpool.Pool) pgtype.UUID {
 	}
 	return userID
 }
+
+// Retrieval must treat unstated source data the same way the eligibility gate
+// does: as passing. It originally required the field to equal the user's
+// preference, which excluded every posting whose employer had not said — 26 of
+// 286 in the eval corpus for work mode alone, and the eval harness saw it only as
+// missing retrieval coverage. A posting nobody retrieves is indistinguishable
+// from one that does not exist, which is why this needs its own test.
+func TestUnstatedWorkModeAndCountryAreRetrieved(t *testing.T) {
+	pool := dbtest.Pool(t)
+	ids := seed(t, pool, map[string]posting{
+		// Neither work mode nor country stated, which is the common case on real
+		// boards.
+		"unstated": {title: "Backend Engineer Unstated", text: backendText},
+		"remote":   {title: "Remote Backend Engineer", text: backendText, workMode: "remote", country: "DE"},
+		"onsite":   {title: "Onsite Backend Engineer Elsewhere", text: backendText, workMode: "onsite", country: "JP"},
+	})
+	remote := "remote"
+
+	res, err := New(pool).Retrieve(context.Background(),
+		queryVector(t, backendText), embed.LocalVersion,
+		Criteria{WorkMode: &remote, Countries: []string{"DE"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found(res, ids["unstated"]) {
+		t.Error("a posting stating neither work mode nor country was excluded by retrieval, " +
+			"though the gate would admit it")
+	}
+	if !found(res, ids["remote"]) {
+		t.Error("a matching remote posting was excluded")
+	}
+	// The fix must not turn the predicate into a no-op: a posting that DID state a
+	// conflicting value is still excluded.
+	if found(res, ids["onsite"]) {
+		t.Error("an onsite posting in the wrong country was returned; the predicate is now a no-op")
+	}
+}

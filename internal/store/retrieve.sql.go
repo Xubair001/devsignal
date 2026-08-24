@@ -19,9 +19,13 @@ SELECT count(*)
    AND o.merged_into IS NULL
    AND o.closed_at IS NULL
    AND (cardinality($1::char(2)[]) = 0
+        -- Unstated location passes, exactly as the eligibility gate treats it.
+        OR o.location_country IS NULL
         OR o.location_country = ANY ($1::char(2)[])
         OR o.work_mode = 'remote')
    AND ($2::text IS NULL
+        -- Unstated work mode passes, as the gate does.
+        OR o.work_mode IS NULL
         OR o.work_mode = $2::text
         OR ($2::text = 'hybrid' AND o.work_mode = 'remote'))
    AND (cardinality($3::text[]) = 0
@@ -71,9 +75,13 @@ SELECT o.id,
    AND to_tsvector('english', coalesce(o.title_normalized, ''))
        @@ websearch_to_tsquery('english', $1::text)
    AND (cardinality($2::char(2)[]) = 0
+        -- Unstated location passes, exactly as the eligibility gate treats it.
+        OR o.location_country IS NULL
         OR o.location_country = ANY ($2::char(2)[])
         OR o.work_mode = 'remote')
    AND ($3::text IS NULL
+        -- Unstated work mode passes, as the gate does.
+        OR o.work_mode IS NULL
         OR o.work_mode = $3::text
         OR ($3::text = 'hybrid' AND o.work_mode = 'remote'))
    AND (cardinality($4::text[]) = 0
@@ -157,6 +165,7 @@ func (q *Queries) RetrieveByKeyword(ctx context.Context, arg RetrieveByKeywordPa
 
 const retrieveByVector = `-- name: RetrieveByVector :many
 
+
 SELECT o.id,
        o.title_raw,
        o.company_id,
@@ -175,12 +184,16 @@ SELECT o.id,
    -- everything. Postgres has no "match anything" array, so each predicate is
    -- written as "unconstrained OR matches".
    AND (cardinality($3::char(2)[]) = 0
+        -- Unstated location passes, exactly as the eligibility gate treats it.
+        OR o.location_country IS NULL
         OR o.location_country = ANY ($3::char(2)[])
         -- A remote posting is not excluded by a country filter: its location is
         -- a formality, and dropping it would hide the roles remote-seeking users
         -- most want.
         OR o.work_mode = 'remote')
    AND ($4::text IS NULL
+        -- Unstated work mode passes, as the gate does.
+        OR o.work_mode IS NULL
         OR o.work_mode = $4::text
         -- Asking for remote accepts hybrid; asking for hybrid does not accept
         -- onsite. The asymmetry is the point: hybrid is a superset of remote days.
@@ -227,6 +240,14 @@ type RetrieveByVectorRow struct {
 //
 // Nothing here ranks. Ordering inside a channel only decides what survives the
 // cap; the fit score in step 15 is the only thing that ranks.
+// Every predicate below treats UNSTATED source data as passing, matching the
+// eligibility gate. Retrieval originally required the field to equal the user's
+// preference, which excluded any posting whose employer had not said — 26 of 286
+// in the eval corpus for work mode alone. The eval harness surfaced it as missing
+// retrieval coverage, and it was invisible before that because a posting nobody
+// retrieves looks identical to a posting that does not exist.
+//
+// A filter that nothing can satisfy is not a stricter filter, it is a bug.
 // Channel 1: nearest neighbours to the profile vector among eligible postings.
 //
 // The planner is deliberately left to choose its own scan. Forcing the index

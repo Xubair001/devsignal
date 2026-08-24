@@ -1,0 +1,205 @@
+[
+ {
+  "id": "senior-backend-go",
+  "headline": "Senior backend engineer working in Go and PostgreSQL on distributed systems",
+  "constructed_from": "synthetic persona; skills and seniority chosen to match the backend postings present in the recorded corpus",
+  "seniority_ordinal": 4,
+  "is_management": false,
+  "target_role_families": [
+   "backend",
+   "platform"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "go",
+   "postgresql",
+   "kubernetes",
+   "grpc",
+   "distributed-systems"
+  ]
+ },
+ {
+  "id": "staff-platform-sre",
+  "headline": "Staff infrastructure engineer, Kubernetes and observability at scale",
+  "constructed_from": "synthetic persona matching the platform and SRE postings in the corpus",
+  "seniority_ordinal": 5,
+  "is_management": false,
+  "target_role_families": [
+   "platform"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "kubernetes",
+   "terraform",
+   "prometheus",
+   "linux",
+   "go"
+  ]
+ },
+ {
+  "id": "senior-security-engineer",
+  "headline": "Senior security engineer, application security and threat detection",
+  "constructed_from": "synthetic persona matching the security postings in the corpus",
+  "seniority_ordinal": 4,
+  "is_management": false,
+  "target_role_families": [
+   "security"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "appsec",
+   "threat-modelling",
+   "python",
+   "cryptography"
+  ]
+ },
+ {
+  "id": "mid-fullstack-ts",
+  "headline": "Mid-level fullstack engineer, TypeScript and React with a Rails backend",
+  "constructed_from": "synthetic persona matching the fullstack postings in the corpus",
+  "seniority_ordinal": 3,
+  "is_management": false,
+  "target_role_families": [
+   "fullstack",
+   "frontend"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "typescript",
+   "react",
+   "ruby",
+   "rails",
+   "graphql"
+  ]
+ },
+ {
+  "id": "senior-product-manager",
+  "headline": "Senior product manager for developer tooling and platform products",
+  "constructed_from": "synthetic persona matching the product management postings in the corpus",
+  "seniority_ordinal": 4,
+  "is_management": false,
+  "target_role_families": [
+   "product"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "product-discovery",
+   "roadmapping",
+   "analytics",
+   "sql"
+  ]
+ },
+ {
+  "id": "engineering-manager",
+  "headline": "Engineering manager leading backend and platform teams",
+  "constructed_from": "synthetic persona matching the engineering management postings in the corpus",
+  "seniority_ordinal": 5,
+  "is_management": true,
+  "target_role_families": [
+   "engineering",
+   "backend"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "people-management",
+   "hiring",
+   "go",
+   "architecture"
+  ]
+ },
+ {
+  "id": "support-engineer",
+  "headline": "Technical support engineer for a developer platform",
+  "constructed_from": "synthetic persona matching the support postings in the corpus",
+  "seniority_ordinal": 3,
+  "is_management": false,
+  "target_role_families": [
+   "support"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "troubleshooting",
+   "sql",
+   "linux",
+   "customer-communication"
+  ]
+ },
+ {
+  "id": "senior-product-designer",
+  "headline": "Senior product designer, design systems and complex web applications",
+  "constructed_from": "synthetic persona matching the design postings in the corpus",
+  "seniority_ordinal": 4,
+  "is_management": false,
+  "target_role_families": [
+   "design"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "design-systems",
+   "figma",
+   "interaction-design",
+   "accessibility"
+  ]
+ },
+ {
+  "id": "enterprise-account-executive",
+  "headline": "Enterprise account executive selling developer platforms",
+  "constructed_from": "synthetic persona matching the large sales cohort in the corpus",
+  "seniority_ordinal": 4,
+  "is_management": false,
+  "target_role_families": [
+   "sales"
+  ],
+  "target_countries": null,
+  "work_mode_preference": "remote",
+  "languages": [
+   "en"
+  ],
+  "target_employment_types": null,
+  "skills": [
+   "enterprise-sales",
+   "pipeline-management",
+   "negotiation"
+  ]
+ }
+]

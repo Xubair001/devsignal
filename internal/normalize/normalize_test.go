@@ -41,10 +41,14 @@ func TestParseTitleRealWorld(t *testing.T) {
 		{"Senior Threat Intelligence Engineer", FamilySecurity, int(SenioritySenior), false},
 		{"Site Reliability Engineer", FamilyPlatform, -1, false},
 		{"Machine Learning Engineer", FamilyMl, -1, false},
-		{"Engineering Manager, Growth", FamilyEngineering, -1, true},
+		{engManagerGrowth, FamilyEngineering, -1, true},
 		{"Director of Engineering", FamilyEngineering, -1, true},
 		{"Strategic Account Executive - Turkey", FamilySales, -1, false},
-		{"Ecosystem Sales Manager, Carahsoft (Washington DC)", FamilySales, -1, true},
+		// Was expected to be management, which encoded the bare-"manager" bug: an
+		// Ecosystem Sales Manager owns a partner book, not a team. Measured on 286
+		// real postings, bare "manager" classified 35% of the corpus as people
+		// leadership.
+		{"Ecosystem Sales Manager, Carahsoft (Washington DC)", FamilySales, -1, false},
 		{"Customer Success Architect, CEUR", FamilySupport, -1, false},
 		// "Team Member Relations" is GitLab's in-house phrase for employee
 		// relations. A generic ruleset should NOT learn one company's jargon, so

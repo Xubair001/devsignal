@@ -323,14 +323,79 @@ func TestSeniorityIsAsymmetric(t *testing.T) {
 	}
 }
 
-// The opportunity column permits 0-9 while the profile ladder is 1-6. Comparing
-// across them is a category error, so an off-ladder value is unknown.
-func TestOffLadderSeniorityIsUnavailableNotADistance(t *testing.T) {
+// The opportunity column permits 0-9 while the profile ladder is 1-6. An
+// off-ladder value must NOT be turned into a distance: 9 against a profile at 4
+// would compute five rungs apart, which is arithmetic on incomparable scales. It
+// is treated as an unknown level on a known track instead.
+func TestOffLadderSeniorityIsNotTurnedIntoADistance(t *testing.T) {
 	f := ComputeFit(prof(), cand(func(c *Candidate) { c.Opportunity.SeniorityOrdinal = i16(9) }))
 	for _, fs := range f.Factors {
-		if fs.Factor == FactorSeniority && fs.Available {
-			t.Errorf("seniority 9 was scored as a distance (value %.2f) against a 1-6 profile scale",
-				fs.Value)
+		if fs.Factor != FactorSeniority {
+			continue
+		}
+		if fs.Value != sameTrackUnknownLevel {
+			t.Errorf("seniority 9 scored %.2f; want %.2f (unknown level, not a five-rung distance)",
+				fs.Value, sameTrackUnknownLevel)
+		}
+	}
+}
+
+// w1 ignored is_management, and the eval harness found the cost: IC staff roles
+// outranked actual Engineering Manager roles for a manager persona.
+func TestManagementAndICAreDifferentTracksNotDifferentRungs(t *testing.T) {
+	manager := prof(func(p *Profile) {
+		p.Profile.IsManagement = true
+		p.Profile.SeniorityOrdinal = i16(5)
+	})
+
+	// A management posting carries no IC rung, because normalization keeps the
+	// ladders apart. It must still beat a same-rung IC role for a manager.
+	managementRole := cand(func(c *Candidate) {
+		c.Opportunity.IsManagement = true
+		c.Opportunity.SeniorityOrdinal = nil
+	})
+	icRole := cand(func(c *Candidate) {
+		c.Opportunity.IsManagement = false
+		c.Opportunity.SeniorityOrdinal = i16(5) // exactly the manager's rung
+	})
+
+	mgmt := ComputeFit(manager, managementRole)
+	ic := ComputeFit(manager, icRole)
+	if mgmt.Score <= ic.Score {
+		t.Errorf("for a manager, an IC role at the same rung (%d) scored at or above a "+
+			"management role (%d); the tracks are being treated as one ladder",
+			ic.Score, mgmt.Score)
+	}
+
+	// And symmetrically: an IC must not be pushed toward management roles.
+	individual := prof(func(p *Profile) { p.Profile.SeniorityOrdinal = i16(5) })
+	icForIC := ComputeFit(individual, icRole)
+	mgmtForIC := ComputeFit(individual, managementRole)
+	if mgmtForIC.Score >= icForIC.Score {
+		t.Errorf("for an IC, a management role scored %d against %d for an IC role",
+			mgmtForIC.Score, icForIC.Score)
+	}
+}
+
+// A cross-track role is not irrelevant — it is a real career step — so it scores
+// low rather than being dropped. Dropping it would shrink the achievable maximum
+// and make it look BETTER than a same-track role at the wrong level.
+func TestCrossTrackScoresLowButStaysAvailable(t *testing.T) {
+	manager := prof(func(p *Profile) { p.Profile.IsManagement = true })
+	f := ComputeFit(manager, cand())
+
+	for _, fs := range f.Factors {
+		if fs.Factor != FactorSeniority {
+			continue
+		}
+		if !fs.Available {
+			t.Fatal("a cross-track role left seniority unavailable, shrinking the maximum")
+		}
+		if fs.Value != trackChangeValue {
+			t.Errorf("cross-track value %.2f, want %.2f", fs.Value, trackChangeValue)
+		}
+		if fs.Reason == "" {
+			t.Error("a cross-track mismatch must say so")
 		}
 	}
 }

@@ -49,3 +49,50 @@ func TestOrdinalsOffTheLadderAreUnknown(t *testing.T) {
 		t.Error("a nil ordinal must stay unknown")
 	}
 }
+
+// Real titles from the recorded corpus that bare "manager" misfiled as people
+// leadership. These are the highest-value cases in this file: each one is a title
+// that actually exists on a live board, and each was mis-sorted onto the wrong
+// career track until the needle was tightened.
+func TestCommercialManagerTitlesAreNotPeopleLeadership(t *testing.T) {
+	for _, title := range []string{
+		"Business Development Manager",
+		"Business Development Manager APAC",
+		"Customer Success Manager",
+		"Customer Success Manager- Public Sector",
+		"Business Growth / Senior Account Manager (Acquiring)",
+		"Card Schemes Manager - Mexico",
+		"Product Manager",
+		"Staff Lifecycle Marketing Manager",
+		"Event Manager (Community focused)",
+		"Senior Product Manager, Developer Experience",
+		"Program Manager, Field Operations",
+	} {
+		if got := ParseTitle(title); got.IsManagement {
+			t.Errorf("%q classified as people leadership; it is an individual contributor role", title)
+		}
+	}
+}
+
+// The titles that genuinely are people leadership must still be caught, or the
+// tightening has traded one misclassification for another.
+// A real title used in more than one test, named so a typo cannot make two tests
+// silently disagree about the same input.
+const engManagerGrowth = "Engineering Manager, Growth"
+
+func TestGenuineManagementTitlesAreStillCaught(t *testing.T) {
+	for _, title := range []string{
+		engManagerGrowth,
+		"Engineering Manager, Data Foundations",
+		"Senior Engineering Manager, Non-Linear Product",
+		"Director of Engineering, Security Factory",
+		"Director, Engineering, Platform Operations & Productivity",
+		"Area Vice President - Financial Services",
+		"Head of Infrastructure",
+		"Chief Technology Officer",
+	} {
+		if got := ParseTitle(title); !got.IsManagement {
+			t.Errorf("%q not classified as people leadership", title)
+		}
+	}
+}

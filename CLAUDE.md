@@ -7,12 +7,13 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–15 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–16 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
 embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
-score and its explanation. It ingests real postings from multiple boards:
+score and its explanation, and the evaluation harness that gates every scoring change. It
+ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -23,10 +24,13 @@ for one user — the operational answer to "why am I not seeing X".
 `--role=match --user=<id>` prints the band, the per-factor arithmetic and the exclusions with
 their specific reasons.
 
-Next: step 16 — the eval harness. It is the gate hard rule 16 refers to, and `make eval` fails
-loudly until it exists. Two things already need it: the fit weights have never been measured
-against labelled data, and the local embedder scores profile-to-posting similarity far lower
-than posting-to-posting, so whether it stays is an open question with a measurement attached.
+`make eval` is live and wired into CI. Current: NDCG@10 0.877, Precision@7 0.873, coverage 88%,
+eligibility false positives 0, over 286 real postings and 2,574 labelled pairs. The labels are
+**rubric-derived, not human** — the gate detects regressions, it does not measure product
+quality. Behavioural labels replace the rubric at step 17.
+
+Next: step 17 — feed, saves, applications, dismiss-with-reason. It starts the data engine and
+produces the labels the eval harness actually wants.
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this

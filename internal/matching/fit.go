@@ -12,11 +12,18 @@ import (
 
 // WeightsVersion identifies this set of factors and weights.
 //
+// w2: the seniority factor became track-aware. w1 ignored is_management entirely,
+// so for an engineering-manager persona the eval harness ranked IC staff roles
+// (30 of 45 points) above actual Engineering Manager roles (14 of 30) — NDCG@10
+// of 0.143 against 1.000 for the backend persona. Management and IC are different
+// ladders, not different rungs of one, and the scorer was the only part of the
+// system that did not know it.
+//
 // It is part of the fit_score primary key, so bumping it is what invalidates
 // cached scores. Change a weight without bumping this and users keep seeing the
 // old number — the failure is silent, which is why it is called out here rather
 // than in a comment somewhere further down.
-const WeightsVersion = "w1"
+const WeightsVersion = "w2"
 
 // Factor names. Displayed to users and stored in the breakdown, so they are part
 // of the contract.
@@ -362,15 +369,52 @@ func semantic(c Candidate) FactorScore {
 	return fs
 }
 
-// seniority is closeness on the ordinal ladder.
+// trackChangeValue is what a cross-track role scores.
 //
-// Asymmetric on purpose. A role one rung BELOW the user is a mild mismatch — they
-// can do the work, it may pay less. A role one rung ABOVE is a stretch that may
-// be worth applying to. Two rungs above is usually a waste of an application, and
-// two below usually a waste of the user's career. Symmetric distance would rank
-// those identically.
+// Not zero: moving from IC to management or back is a real and common career step,
+// so the role is not irrelevant. Low, because it is not what the user asked for,
+// and the alternative — leaving the factor unavailable — would shrink the
+// achievable maximum and make a cross-track role look BETTER than a same-track one
+// at the wrong level.
+const trackChangeValue = 0.15
+
+// sameTrackUnknownLevel is what a same-track role with no stated level scores.
+//
+// The track agreeing is real information derived from both titles; the level is
+// genuinely unknown. A value in the middle says exactly that, and keeps the factor
+// available so the achievable maximum reflects what we do know.
+const sameTrackUnknownLevel = 0.6
+
+// seniority is closeness on the ladder, and agreement about WHICH ladder.
+//
+// Track first. Management and individual contribution are different tracks, not
+// different rungs — normalization has said so since step 8, and w1 of this scorer
+// ignored it. The eval harness found the consequence: for an engineering-manager
+// persona, IC staff roles scored 30 of 45 while actual Engineering Manager roles
+// scored 14 of 30, because a management title carries no IC rung and the factor
+// simply went unavailable.
+//
+// Within a track the comparison is asymmetric on purpose. A role one rung BELOW
+// the user is a mild mismatch — they can do the work, it may pay less. One rung
+// ABOVE is a stretch worth seeing. Two rungs above usually wastes an application,
+// two below usually wastes a career step. Symmetric distance would rank those
+// identically.
 func seniority(p Profile, c Candidate) FactorScore {
 	fs := FactorScore{Factor: FactorSeniority}
+
+	// is_management is derived from the title on both sides, so "false" means
+	// "this title is not a management title" rather than "unknown". That is a
+	// determination, which is why it is safe to score on.
+	if p.Profile.IsManagement != c.Opportunity.IsManagement {
+		fs.Available = true
+		fs.Value = trackChangeValue
+		if p.Profile.IsManagement {
+			fs.Reason = "an individual contributor role, and you are looking for management"
+		} else {
+			fs.Reason = "a management role, and you are looking for individual contribution"
+		}
+		return fs
+	}
 
 	want := p.Profile.SeniorityOrdinal
 	have := c.Opportunity.SeniorityOrdinal
@@ -381,7 +425,9 @@ func seniority(p Profile, c Candidate) FactorScore {
 	// Off-ladder ordinals are unknown, not clamped: the opportunity column permits
 	// 0-9 and comparing 9 against a 1-6 profile scale is a category error.
 	if have == nil || normalize.SeniorityLabel(have) == nil {
-		fs.Reason = "this posting does not state a seniority level"
+		fs.Available = true
+		fs.Value = sameTrackUnknownLevel
+		fs.Reason = "the right track, but this posting does not state a level"
 		return fs
 	}
 

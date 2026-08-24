@@ -141,8 +141,12 @@ test-integration: test-db ## integration tests against a disposable database (ne
 	go test -tags integration -count=1 -timeout 300s -p 1 ./...
 
 .PHONY: eval
-eval: ## [step 16] ranking evaluation harness — gates scoring changes
-	@echo "not built yet — arrives with the eval harness (blueprint §35 step 16)"; exit 1
+eval: test-db ## ranking evaluation harness — gates scoring changes
+	@DATABASE_URL="$(DB_TEST_URL)" go run ./cmd/devsignal --role=eval
+
+.PHONY: eval-record
+eval-record: test-db ## overwrite the committed eval baseline (a reviewed act)
+	@DATABASE_URL="$(DB_TEST_URL)" go run ./cmd/devsignal --role=eval --record-baseline
 
 .PHONY: check-erasure
 check-erasure: test-db ## proves an erased user leaves no trace in any store

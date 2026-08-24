@@ -5,13 +5,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -27,6 +30,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/config"
 	"github.com/Xubair001/devsignal/internal/embed"
 	"github.com/Xubair001/devsignal/internal/enrich"
+	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
 	"github.com/Xubair001/devsignal/internal/matching"
 	"github.com/Xubair001/devsignal/internal/opportunity"
@@ -52,15 +56,18 @@ import (
 func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
-			"spend | retrieve | match | reindex-profiles | digest | admin")
+			"spend | retrieve | match | eval | reindex-profiles | digest | admin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
-	userID := flag.String("user", "", "user id (retrieve)")
+	userID := flag.String("user", "", "user id (retrieve, match)")
+	recordBaseline := flag.Bool("record-baseline", false,
+		"eval: overwrite the committed baseline with this run (a reviewed act)")
 	flag.Parse()
 
 	if err := run(*role, flags{
 		source: *srcName, file: *srcFile, reviewer: *reviewer, user: *userID,
+		recordBaseline: *recordBaseline,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -72,10 +79,11 @@ func main() {
 // strings: the roles that take arguments now outnumber the ones that do not, and
 // four same-typed parameters in a row are trivial to transpose at a call site.
 type flags struct {
-	source   string
-	file     string
-	reviewer string
-	user     string
+	source         string
+	file           string
+	reviewer       string
+	user           string
+	recordBaseline bool
 }
 
 func run(role string, f flags) error {
@@ -136,6 +144,8 @@ func run(role string, f flags) error {
 		return retrieveReport(ctx, pool, f.user)
 	case "match":
 		return matchReport(ctx, log, pool, f.user)
+	case "eval":
+		return evalReport(ctx, log, pool, f.recordBaseline)
 	case "reindex-profiles":
 		return reindexProfiles(ctx, log, pool)
 	case "digest", "admin":
@@ -813,3 +823,74 @@ func matchReport(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, user
 	}
 	return nil
 }
+
+// evalReport runs the evaluation harness and compares against the committed
+// baseline. This is the gate hard rule 16 refers to.
+func evalReport(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, record bool) error {
+	m, err := eval.NewHarness(pool, log).Run(ctx)
+	if err != nil {
+		return err
+	}
+	base, err := eval.LoadBaseline()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("  NDCG@10        %.3f", m.NDCG10)
+	if base.NDCG10 > 0 {
+		fmt.Printf("   (baseline %.3f)   %+.3f", base.NDCG10, m.NDCG10-base.NDCG10)
+	}
+	fmt.Println()
+	fmt.Printf("  Precision@7    %.3f", m.Precision7)
+	if base.Precision7 > 0 {
+		fmt.Printf("   (baseline %.3f)   %+.3f", base.Precision7, m.Precision7-base.Precision7)
+	}
+	fmt.Println()
+	fmt.Printf("  Eligibility FP %d      <- a gate that admits an ineligible role is a bug, not a metric\n",
+		m.EligibilityFP)
+	fmt.Printf("  Coverage       %.0f%%    of judged-relevant pairs returned by retrieval (%d/%d)\n",
+		m.Coverage*100, m.CoverageFound, m.CoverageTotal)
+	fmt.Printf("\n  %d personas scored, %d skipped (no relevant judgements), %d judgements used\n",
+		m.PersonasScored, m.PersonasSkipped, m.JudgementsUsed)
+	fmt.Printf("  weights %s, embedding %s\n\n", matching.WeightsVersion, embed.LocalVersion)
+
+	fmt.Println("  per persona (so a regression can be attributed, not merely observed):")
+	for _, p := range m.PerPersona {
+		note := ""
+		if p.Skipped {
+			note = "  (skipped: no relevant judgements)"
+		}
+		fmt.Printf("    %-30s ndcg %.3f  p@7 %.3f  cov %d/%d  fp %d  returned %d%s\n",
+			p.PersonaID, p.NDCG10, p.Precision7, p.CoverageFound, p.CoverageTotal,
+			p.EligibilityFP, p.Returned, note)
+	}
+
+	if record {
+		out := eval.Baseline{
+			NDCG10: round3(m.NDCG10), Precision7: round3(m.Precision7),
+			Coverage: round3(m.Coverage), EligibilityFP: m.EligibilityFP,
+			WeightsVersion: matching.WeightsVersion, EmbeddingVersion: embed.LocalVersion,
+			RecordedAt: time.Now().UTC().Format(time.RFC3339),
+			Note: "rubric-derived labels, not human judgements: this gate detects " +
+				"regressions, it does not measure product quality",
+		}
+		b, err := json.MarshalIndent(out, "", " ")
+		if err != nil {
+			return err
+		}
+		path := filepath.Join("internal", "eval", "testdata", "baseline.json")
+		if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("\nbaseline recorded to %s\n", path)
+		return nil
+	}
+
+	if regressed, why := m.Regressed(base); regressed {
+		return fmt.Errorf("eval gate failed: %s", why)
+	}
+	fmt.Println("\ngate passed")
+	return nil
+}
+
+func round3(v float64) float64 { return math.Round(v*1000) / 1000 }

@@ -145,8 +145,35 @@ var seniorityRules = []struct {
 // managementNeedles indicate people leadership. "lead" is deliberately absent:
 // "Tech Lead" is usually an IC role, and guessing wrong here mis-sorts a whole
 // career track.
+//
+// Bare "manager" was also here, and was worse than "lead" for exactly the reason
+// that comment gives. Measured on 286 real postings from three boards, it flagged
+// 99 of them — 35% — as people leadership, including "Business Development
+// Manager", "Customer Success Manager", "Account Manager" and "Product Manager".
+// In commercial titles "X Manager" usually means an individual owning a book of
+// business or a product, not a person managing people.
+//
+// It stayed invisible until the fit score began reading is_management, at which
+// point the eval harness showed the product-manager persona's NDCG@10 collapse
+// from 0.699 to 0.026: every Product Manager posting had become a cross-track
+// mismatch. "Manager" now only counts where the title names a management context.
+// Needles are matched as substrings against a space-padded title, so any needle
+// short enough to appear inside another word MUST carry its own spaces. "cto"
+// without them matched "Public Se-cto-r", which classified every public-sector
+// sales title as people leadership — a bug that predated the tightening below and
+// was found by the same eval run.
 var managementNeedles = []string{
-	"manager", "director", "vp ", "vice president", "head of", "chief", "cto", "ceo", "cfo",
+	"director", "vice president", "head of", "chief",
+	" vp ", " cto ", " ceo ", " cfo ", " cpo ", " cio ",
+	// "Manager" only in contexts that are unambiguously about leading people or an
+	// engineering organisation. Anything not listed here stays IC, which is the
+	// safe direction: a misfiled IC role ranks slightly wrong, while a misfiled
+	// management role hides an entire track from the person looking for it.
+	//
+	// "development manager" is deliberately absent: it matches "Business
+	// Development Manager", which is an individual sales role.
+	"engineering manager", "manager, engineering", "manager of engineering",
+	"delivery manager", "people manager", "team manager", "technical manager",
 }
 
 // roleFamilyRules map keywords to a family. Order matters: the more specific
