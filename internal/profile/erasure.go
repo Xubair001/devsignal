@@ -32,6 +32,9 @@ const (
 
 	// Live since step 14.
 	LocProfileEmbedding = "profile_embedding"
+	// Live since step 15.
+	LocFitScores   = "fit_scores"
+	LocEligibility = "eligibility_results"
 
 	// Declared but not yet applicable: these stores exist in the design and will
 	// hold user-derived data at their step. Recorded as not_applicable rather
@@ -48,6 +51,8 @@ const (
 var AllLocations = []string{
 	LocObjectStorage,
 	LocProfileEmbedding,
+	LocFitScores,
+	LocEligibility,
 	LocSearchIndex,
 	LocRedisCache,
 	LocAnalytics,
@@ -111,9 +116,11 @@ func (s *Service) Erase(ctx context.Context, userID pgtype.UUID) (*ErasureReport
 		fn  func(context.Context, pgtype.UUID) (int64, error)
 	}
 	for _, d := range []del{
-		// Before the profile row: the vector is derived from it, and losing the
-		// profile first would leave a vector nothing points at.
+		// Before the profile row: all three are derived from it, and losing the
+		// profile first would leave derived rows nothing points at.
 		{LocProfileEmbedding, s.q.DeleteProfileEmbedding},
+		{LocFitScores, s.q.DeleteFitScores},
+		{LocEligibility, s.q.DeleteEligibilityResults},
 		{LocResumeRows, s.q.DeleteResumeRows},
 		{LocProfileSkills, s.q.DeleteProfileSkills},
 		{LocProfile, s.q.DeleteProfileData},

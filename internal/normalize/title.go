@@ -15,7 +15,86 @@ const (
 	SenioritySenior    int16 = 4
 	SeniorityStaff     int16 = 5
 	SeniorityPrincipal int16 = 6
+
+	// SeniorityMin and SeniorityMax bound the ladder. The fit score's seniority
+	// term divides by this span, and anything outside it is treated as unknown
+	// rather than clamped: the opportunity column permits 0-9 for historical
+	// reasons, and a value of 9 compared against a 1-6 profile is not a distance,
+	// it is a category error.
+	SeniorityMin int16 = SeniorityIntern
+	SeniorityMax int16 = SeniorityPrincipal
 )
+
+// seniorityLadder is the single definition of the rungs.
+//
+// It was previously written out in three places — title parsing, the profile API,
+// and the profile embedder — and the third copy was off by one, so a "mid" profile
+// was embedded with the word "senior". One definition, because a ladder that
+// disagrees with itself silently shifts every seniority comparison by a rung.
+// Rung labels, named so the embedding vocabulary below is built FROM the label
+// rather than repeating it. That makes "the terms contain the label" structural
+// instead of a coincidence a later edit could break.
+const (
+	labelIntern    = "intern"
+	labelJunior    = "junior"
+	labelMid       = "mid"
+	labelSenior    = "senior"
+	labelStaff     = "staff"
+	labelPrincipal = "principal"
+)
+
+var seniorityLadder = map[int16]struct {
+	Label string
+	// Terms is the vocabulary postings actually use, for embedding. The label
+	// alone is too sparse: "mid" rarely appears in a job description, while
+	// "mid level engineer" does.
+	Terms string
+}{
+	SeniorityIntern:    {labelIntern, labelIntern + " internship entry level"},
+	SeniorityJunior:    {labelJunior, labelJunior + " engineer early career"},
+	SeniorityMid:       {labelMid, labelMid + " level engineer intermediate"},
+	SenioritySenior:    {labelSenior, labelSenior + " engineer"},
+	SeniorityStaff:     {labelStaff, labelStaff + " engineer technical lead"},
+	SeniorityPrincipal: {labelPrincipal, labelPrincipal + " engineer distinguished architect"},
+}
+
+// SeniorityLabel is the short name for a rung, or nil when the ordinal is not on
+// the ladder.
+func SeniorityLabel(ordinal *int16) *string {
+	if ordinal == nil {
+		return nil
+	}
+	if r, ok := seniorityLadder[*ordinal]; ok {
+		l := r.Label
+		return &l
+	}
+	return nil
+}
+
+// SeniorityOrdinal maps a label back to its rung.
+func SeniorityOrdinal(label *string) *int16 {
+	if label == nil {
+		return nil
+	}
+	for ord, r := range seniorityLadder {
+		if r.Label == *label {
+			o := ord
+			return &o
+		}
+	}
+	return nil
+}
+
+// SeniorityTerms is the embedding vocabulary for a rung, empty when unknown.
+func SeniorityTerms(ordinal *int16) string {
+	if ordinal == nil {
+		return ""
+	}
+	if r, ok := seniorityLadder[*ordinal]; ok {
+		return r.Terms
+	}
+	return ""
+}
 
 // Role families. A closed enum: retrieval filters and the fit score's domain
 // term both key on these, so the set must be shared rather than restated.

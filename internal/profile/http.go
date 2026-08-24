@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Xubair001/devsignal/internal/auth"
+	"github.com/Xubair001/devsignal/internal/normalize"
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
@@ -162,7 +163,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 
 	in := Input{
 		Headline: req.Headline, YearsExperience: req.YearsExperience,
-		SeniorityOrdinal: seniorityOrdinal(req.Seniority), IsManagement: req.IsManagement,
+		SeniorityOrdinal: normalize.SeniorityOrdinal(req.Seniority), IsManagement: req.IsManagement,
 		TargetRoleFamilies: req.TargetRoleFamilies, TargetCountries: req.TargetCountries,
 		WorkModePreference: req.WorkModePreference, Languages: req.Languages,
 		TargetEmploymentTypes: req.TargetEmploymentTypes,
@@ -308,7 +309,7 @@ func (h *Handler) erase(w http.ResponseWriter, r *http.Request) {
 func toProfileResponse(p store.Profile, skills []store.ListProfileSkillsRow) profileResponse {
 	out := profileResponse{
 		Headline: p.Headline, YearsExperience: p.YearsExperience,
-		Seniority: seniorityLabel(p.SeniorityOrdinal), IsManagement: p.IsManagement,
+		Seniority: normalize.SeniorityLabel(p.SeniorityOrdinal), IsManagement: p.IsManagement,
 		TargetRoleFamilies:    nonNil(p.TargetRoleFamilies),
 		TargetEmploymentTypes: nonNil(p.TargetEmploymentTypes),
 		TargetCountries:       nonNil(p.TargetCountries),
@@ -360,33 +361,6 @@ func decodeAuth(raw []byte) map[string]string {
 		_ = json.Unmarshal(raw, &out)
 	}
 	return out
-}
-
-var seniorityLabels = map[int16]string{
-	1: "intern", 2: "junior", 3: "mid", 4: "senior", 5: "staff", 6: "principal",
-}
-
-func seniorityLabel(ord *int16) *string {
-	if ord == nil {
-		return nil
-	}
-	if s, ok := seniorityLabels[*ord]; ok {
-		return &s
-	}
-	return nil
-}
-
-func seniorityOrdinal(label *string) *int16 {
-	if label == nil {
-		return nil
-	}
-	for ord, name := range seniorityLabels {
-		if name == *label {
-			o := ord
-			return &o
-		}
-	}
-	return nil
 }
 
 // ---------------------------------------------------------------- plumbing

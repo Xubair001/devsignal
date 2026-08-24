@@ -21,6 +21,7 @@ import (
 	"github.com/pgvector/pgvector-go"
 
 	"github.com/Xubair001/devsignal/internal/embed"
+	"github.com/Xubair001/devsignal/internal/normalize"
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
@@ -124,9 +125,8 @@ func ProfileText(p store.Profile, skills []store.ListProfileSkillsRow) string {
 		b.WriteString(strings.Join(p.TargetRoleFamilies, " "))
 		b.WriteString("\n")
 	}
-	// Seniority as a word, not a number: the embedder sees text, and "senior"
-	// appears in postings while "4" does not.
-	if w := seniorityWord(p.SeniorityOrdinal); w != "" {
+	// Vocabulary from normalize, which owns the ladder.
+	if w := normalize.SeniorityTerms(p.SeniorityOrdinal); w != "" {
 		b.WriteString(w)
 		b.WriteString("\n")
 	}
@@ -160,30 +160,6 @@ func skillRepetitions(proficiency *int16) int {
 		return maxSkillRepetitions
 	}
 	return r
-}
-
-// seniorityWord maps the stored ordinal onto the vocabulary postings use. The
-// ordinals are the schema's 1-6 range (profile_seniority_ordinal_check).
-func seniorityWord(ordinal *int16) string {
-	if ordinal == nil {
-		return ""
-	}
-	switch *ordinal {
-	case 1:
-		return "junior entry level"
-	case 2:
-		return "mid level engineer"
-	case 3:
-		return "senior engineer"
-	case 4:
-		return "staff engineer"
-	case 5:
-		return "principal engineer"
-	case 6:
-		return "distinguished engineer architect"
-	default:
-		return ""
-	}
 }
 
 // Local returns the embedder the rest of the system uses, so a caller cannot

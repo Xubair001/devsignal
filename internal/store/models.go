@@ -67,6 +67,17 @@ type CompanyMerge struct {
 	UndoneAt      pgtype.Timestamptz
 }
 
+// Why a posting was excluded. User-derived: erasure deletes these.
+type EligibilityResult struct {
+	UserID             pgtype.UUID
+	OpportunityID      pgtype.UUID
+	ProfileVersion     int32
+	OpportunityVersion int32
+	Eligible           bool
+	FailedChecks       []string
+	EvaluatedAt        pgtype.Timestamptz
+}
+
 type ErasureRequest struct {
 	ID          pgtype.UUID
 	UserID      pgtype.UUID
@@ -95,6 +106,20 @@ type Extraction struct {
 	CacheReadTokens int32
 	Lane            string
 	CreatedAt       pgtype.Timestamptz
+}
+
+// Cached fit scores. User-derived: erasure deletes these (see internal/profile erasure inventory).
+type FitScore struct {
+	UserID             pgtype.UUID
+	OpportunityID      pgtype.UUID
+	WeightsVersion     string
+	ProfileVersion     int32
+	OpportunityVersion int32
+	EmbeddingVersion   string
+	Score              int16
+	Factors            []byte
+	MaxPossible        int16
+	ComputedAt         pgtype.Timestamptz
 }
 
 type MergeCandidate struct {

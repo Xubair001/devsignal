@@ -7,12 +7,12 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–14 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–15 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
-embeddings with vector search, and two-channel retrieval. It ingests real postings from
-multiple boards:
+embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
+score and its explanation. It ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -20,8 +20,13 @@ against each source's own baseline.
 `--role=retrieve --user=<id>` prints the predicates, eligible count and per-channel coverage
 for one user — the operational answer to "why am I not seeing X".
 
-Next: step 15 (eligibility gate + fit score + explanation), then 16 (the eval harness, which
-is what will decide whether the local embedder stays).
+`--role=match --user=<id>` prints the band, the per-factor arithmetic and the exclusions with
+their specific reasons.
+
+Next: step 16 — the eval harness. It is the gate hard rule 16 refers to, and `make eval` fails
+loudly until it exists. Two things already need it: the fit weights have never been measured
+against labelled data, and the local embedder scores profile-to-posting similarity far lower
+than posting-to-posting, so whether it stays is an open question with a measurement attached.
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -198,6 +203,16 @@ blueprint's audit found.
     the company's own platform in every description. Over titles it returned 34, all genuine
     matches. Description semantics belong to the vector channel, which embeds the full text.
 
+23. **A factor with no observable data is excluded from the achievable maximum, never given a
+    neutral value and never renormalized away.** `fit` reports earned points out of achievable
+    points, and the band reads the ratio. Redistributing a missing factor's weight up to 1 was
+    the first design, and it meant removing information RAISED the score: a posting nothing
+    could be extracted from, whose one legible factor matched, read as a Strong fit; and a user
+    with no skills listed outscored the same user after adding one skill that matched half the
+    requirements. Any redistribution scheme has that property. Below 60% coverage the band is
+    "Not enough information", which is a different statement from "Stretch" and only one of them
+    is about the user.
+
 ## The two numbers
 
 The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
@@ -210,6 +225,10 @@ fit_score        stable    f(profile_v, opportunity_v, model_v)
 priority_score   volatile  g(fit, age, closing_soon, saturation)
                            computed at read time; orders today's feed
                            never displayed, never persisted as a match
+
+internal/matching/fit.go        stage 1, pure, no clock
+internal/matching/priority.go   the ONLY place the clock may touch what a user sees
+internal/matching/eligibility.go stage 0 boolean; failures explained, never scored
 ```
 
 Fit is a weighted sum over bounded factors whose weights total 1, so each term contributes exactly

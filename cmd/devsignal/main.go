@@ -28,6 +28,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/embed"
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/ingest"
+	"github.com/Xubair001/devsignal/internal/matching"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
 	"github.com/Xubair001/devsignal/internal/profile"
@@ -51,7 +52,7 @@ import (
 func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
-			"spend | retrieve | reindex-profiles | digest | admin")
+			"spend | retrieve | match | reindex-profiles | digest | admin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -133,6 +134,8 @@ func run(role string, f flags) error {
 		return spendReport(ctx, pool)
 	case "retrieve":
 		return retrieveReport(ctx, pool, f.user)
+	case "match":
+		return matchReport(ctx, log, pool, f.user)
 	case "reindex-profiles":
 		return reindexProfiles(ctx, log, pool)
 	case "digest", "admin":
@@ -740,4 +743,73 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+// matchReport runs the whole matcher for one user and prints what it decided.
+//
+// This is the honest answer to the two questions the product exists to answer —
+// what should I apply to, and why — printed as the arithmetic rather than as a
+// summary of it. It also prints the exclusions, because "why am I NOT seeing X"
+// is the question a ranked list can never answer on its own.
+func matchReport(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, userID string) error {
+	if userID == "" {
+		return fmt.Errorf("--user is required")
+	}
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return fmt.Errorf("parsing --user: %w", err)
+	}
+
+	res, err := matching.New(pool, log).MatchForUser(ctx, uid, 10)
+	if err != nil {
+		if errors.Is(err, matching.ErrNoProfile) {
+			fmt.Println("this user has no profile yet")
+			return nil
+		}
+		if errors.Is(err, retrieve.ErrNoVector) {
+			fmt.Printf("no profile vector for embedding version %q.\n"+
+				"run --role=reindex-profiles to build it.\n", embed.LocalVersion)
+			return nil
+		}
+		return err
+	}
+
+	fmt.Printf("profile version   %d\n", res.ProfileVersion)
+	fmt.Printf("retrieved         %d of %d eligible-by-predicate\n",
+		len(res.Retrieval.Candidates), res.Retrieval.Eligible)
+	fmt.Printf("passed the gate   %d (showing %d)\n", res.Passed, len(res.Matches))
+	fmt.Printf("excluded by gate  %d\n", len(res.Excluded))
+	fmt.Printf("scores from cache %d\n\n", res.CacheHits)
+
+	fmt.Printf("weights version %s — fit is f(profile_v, opportunity_v, weights_v, embedding_v)\n",
+		matching.WeightsVersion)
+	fmt.Print("priority orders this list and is never shown as a match\n\n")
+
+	for i, m := range res.Matches {
+		fmt.Printf("%d. %-52s\n", i+1, truncate(m.Opportunity.TitleRaw, 52))
+		fmt.Printf("     %-22s %s   priority %.1f\n",
+			string(m.Fit.Band()), m.Fit.Summary(), m.Priority)
+		for _, line := range m.Fit.Explain() {
+			fmt.Printf("       %s\n", line)
+		}
+		fmt.Println()
+	}
+
+	if len(res.Excluded) > 0 {
+		fmt.Println("excluded, with the specific reason:")
+		shown := 0
+		for _, e := range res.Excluded {
+			if shown >= 5 {
+				fmt.Printf("  ... %d more\n", len(res.Excluded)-shown)
+				break
+			}
+			fmt.Printf("  %-46s %s\n", truncate(e.Opportunity.TitleRaw, 46),
+				strings.Join(e.Eligibility.FailedChecks(), ", "))
+			for _, r := range e.Eligibility.Reasons() {
+				fmt.Printf("     %s\n", r)
+			}
+			shown++
+		}
+	}
+	return nil
 }
