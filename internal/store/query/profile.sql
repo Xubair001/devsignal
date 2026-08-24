@@ -138,6 +138,7 @@ SELECT (SELECT count(*) FROM profile p        WHERE p.user_id  = sqlc.arg(user_i
      + (SELECT count(*) FROM profile_embedding pe WHERE pe.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM fit_score fsc WHERE fsc.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM eligibility_result er WHERE er.user_id = sqlc.arg(user_id))
+     + (SELECT count(*) FROM engagement_event ee WHERE ee.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM resume r         WHERE r.user_id  = sqlc.arg(user_id))
      + (SELECT count(*) FROM user_session us  WHERE us.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM refresh_token rt WHERE rt.user_id = sqlc.arg(user_id))

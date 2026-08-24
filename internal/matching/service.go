@@ -30,11 +30,12 @@ func (systemClock) Now() time.Time { return time.Now().UTC() }
 
 // Service runs the matcher end to end: retrieve, gate, score, order.
 type Service struct {
-	pool     *pgxpool.Pool
-	q        *store.Queries
-	retrieve *retrieve.Service
-	clock    Clock
-	log      *slog.Logger
+	pool       *pgxpool.Pool
+	q          *store.Queries
+	retrieve   *retrieve.Service
+	saturation Saturation
+	clock      Clock
+	log        *slog.Logger
 }
 
 // New builds the matching service.
@@ -49,6 +50,21 @@ func New(pool *pgxpool.Pool, log *slog.Logger) *Service {
 
 // WithClock replaces the clock, for tests.
 func (s *Service) WithClock(c Clock) *Service { s.clock = c; return s }
+
+// WithSaturation supplies the impression history that feeds the priority
+// penalty. Without it a posting the user has scrolled past ten times keeps its
+// place, which is the behaviour the penalty exists to fix.
+func (s *Service) WithSaturation(sat Saturation) *Service { s.saturation = sat; return s }
+
+// Saturation supplies how many distinct days each posting was already shown to
+// this user without being acted on.
+//
+// An interface so matching does not depend on the engagement package — the
+// dependency runs the other way, since engagement records what matching produced.
+// Nil means no history, which is correct before step 17's log has anything in it.
+type Saturation interface {
+	SaturationFor(ctx context.Context, userID pgtype.UUID) (map[string]int, error)
+}
 
 // Match is one scored, eligible posting.
 type Match struct {
@@ -141,6 +157,18 @@ func (s *Service) MatchForUser(ctx context.Context, userID pgtype.UUID, limit in
 		return nil, err
 	}
 
+	// Impression history. A failure here costs ordering quality, not correctness,
+	// so it degrades to "no history" rather than failing the feed.
+	var shownDays map[string]int
+	if s.saturation != nil {
+		var serr error
+		shownDays, serr = s.saturation.SaturationFor(ctx, userID)
+		if serr != nil {
+			s.log.Warn("loading impression history; ordering without saturation",
+				"user_id", userID.String(), "err", serr)
+		}
+	}
+
 	now := s.clock.Now()
 	for _, c := range candidates {
 		elig := CheckEligibility(profile, c)
@@ -164,9 +192,10 @@ func (s *Service) MatchForUser(ctx context.Context, userID pgtype.UUID, limit in
 			Fit:         fit,
 			Priority: Priority(fit.Score, PrioritySignals{
 				FirstSeenAt: c.Opportunity.FirstSeenAt.Time,
-				// ClosesAt and impression counts arrive with engagement (step 17).
-				// Absent rather than guessed: manufactured urgency is exactly the
-				// invented signal hard rule 3 forbids.
+				// TimesShownAndIgnored comes from the engagement log. ClosesAt stays
+				// absent until a source states one: manufactured urgency is exactly
+				// the invented signal hard rule 3 forbids.
+				TimesShownAndIgnored: shownDays[c.Opportunity.ID.String()],
 			}, now),
 			Channels: channels[c.Opportunity.ID.String()],
 		})

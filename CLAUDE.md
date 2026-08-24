@@ -7,13 +7,14 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–16 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–17 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
 embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
-score and its explanation, and the evaluation harness that gates every scoring change. It
-ingests real postings from multiple boards:
+score and its explanation, the evaluation harness that gates every scoring change, and the
+feed with saves, applications and dismiss-with-reason. It ingests real postings from multiple
+boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -29,8 +30,13 @@ eligibility false positives 0, over 286 real postings and 2,574 labelled pairs. 
 **rubric-derived, not human** — the gate detects regressions, it does not measure product
 quality. Behavioural labels replace the rubric at step 17.
 
-Next: step 17 — feed, saves, applications, dismiss-with-reason. It starts the data engine and
-produces the labels the eval harness actually wants.
+`engagement_event` is the append-only log behind three things at once: product state, the
+behavioural evaluation set that will replace the rubric labels, and the ranking decision record
+blueprint §32 requires. Nothing there updates or deletes — un-saving appends.
+
+Next: step 18 is the daily digest, which needs the email decisions in
+[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 19 (admin console) and the
+frontend are both unblocked — see [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this

@@ -75,6 +75,55 @@ func (q *Queries) DeleteFitScores(ctx context.Context, userID pgtype.UUID) (int6
 	return result.RowsAffected(), nil
 }
 
+const getCachedFitScore = `-- name: GetCachedFitScore :one
+SELECT f.score, f.max_possible, f.factors, f.weights_version,
+       f.embedding_version, f.profile_version, f.opportunity_version
+  FROM fit_score f
+  JOIN opportunity o ON o.id = f.opportunity_id
+ WHERE f.user_id = $1
+   AND f.opportunity_id = $2
+   AND f.weights_version = $3
+   AND f.opportunity_version = o.version
+ ORDER BY f.computed_at DESC
+ LIMIT 1
+`
+
+type GetCachedFitScoreParams struct {
+	UserID         pgtype.UUID
+	OpportunityID  pgtype.UUID
+	WeightsVersion string
+}
+
+type GetCachedFitScoreRow struct {
+	Score              int16
+	MaxPossible        int16
+	Factors            []byte
+	WeightsVersion     string
+	EmbeddingVersion   string
+	ProfileVersion     int32
+	OpportunityVersion int32
+}
+
+// One cached score, for the engagement decision record.
+//
+// Read from the cache rather than recomputed: the record must say what was SHOWN,
+// and re-running the matcher on every save would also mean a full retrieval and
+// scoring pass on a request that should be a single insert.
+func (q *Queries) GetCachedFitScore(ctx context.Context, arg GetCachedFitScoreParams) (GetCachedFitScoreRow, error) {
+	row := q.db.QueryRow(ctx, getCachedFitScore, arg.UserID, arg.OpportunityID, arg.WeightsVersion)
+	var i GetCachedFitScoreRow
+	err := row.Scan(
+		&i.Score,
+		&i.MaxPossible,
+		&i.Factors,
+		&i.WeightsVersion,
+		&i.EmbeddingVersion,
+		&i.ProfileVersion,
+		&i.OpportunityVersion,
+	)
+	return i, err
+}
+
 const getFitScores = `-- name: GetFitScores :many
 SELECT f.opportunity_id, f.score, f.max_possible, f.factors
   FROM fit_score f

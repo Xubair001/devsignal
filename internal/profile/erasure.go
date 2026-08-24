@@ -35,6 +35,8 @@ const (
 	// Live since step 15.
 	LocFitScores   = "fit_scores"
 	LocEligibility = "eligibility_results"
+	// Live since step 17.
+	LocEngagement = "engagement_events"
 
 	// Declared but not yet applicable: these stores exist in the design and will
 	// hold user-derived data at their step. Recorded as not_applicable rather
@@ -53,6 +55,7 @@ var AllLocations = []string{
 	LocProfileEmbedding,
 	LocFitScores,
 	LocEligibility,
+	LocEngagement,
 	LocSearchIndex,
 	LocRedisCache,
 	LocAnalytics,
@@ -121,6 +124,7 @@ func (s *Service) Erase(ctx context.Context, userID pgtype.UUID) (*ErasureReport
 		{LocProfileEmbedding, s.q.DeleteProfileEmbedding},
 		{LocFitScores, s.q.DeleteFitScores},
 		{LocEligibility, s.q.DeleteEligibilityResults},
+		{LocEngagement, s.q.DeleteEngagementEvents},
 		{LocResumeRows, s.q.DeleteResumeRows},
 		{LocProfileSkills, s.q.DeleteProfileSkills},
 		{LocProfile, s.q.DeleteProfileData},

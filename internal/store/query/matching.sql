@@ -87,3 +87,20 @@ SELECT sqlc.embed(o),
     ON e.opportunity_id = o.id
    AND e.embedding_version = sqlc.arg(embedding_version)
  WHERE o.id = ANY (sqlc.arg(opportunity_ids)::uuid[]);
+
+-- name: GetCachedFitScore :one
+-- One cached score, for the engagement decision record.
+--
+-- Read from the cache rather than recomputed: the record must say what was SHOWN,
+-- and re-running the matcher on every save would also mean a full retrieval and
+-- scoring pass on a request that should be a single insert.
+SELECT f.score, f.max_possible, f.factors, f.weights_version,
+       f.embedding_version, f.profile_version, f.opportunity_version
+  FROM fit_score f
+  JOIN opportunity o ON o.id = f.opportunity_id
+ WHERE f.user_id = sqlc.arg(user_id)
+   AND f.opportunity_id = sqlc.arg(opportunity_id)
+   AND f.weights_version = sqlc.arg(weights_version)
+   AND f.opportunity_version = o.version
+ ORDER BY f.computed_at DESC
+ LIMIT 1;

@@ -29,6 +29,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
 	"github.com/Xubair001/devsignal/internal/embed"
+	"github.com/Xubair001/devsignal/internal/engagement"
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
@@ -225,10 +226,14 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 	if err != nil {
 		return fmt.Errorf("object storage: %w", err)
 	}
+	engagementSvc := engagement.New(pool, log)
 	profileH := profile.NewHandler(
 		profile.NewService(pool, store2, log),
 		profileindex.New(pool, profileindex.Local(), log),
 		log)
+
+	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
+	feedH := engagement.NewHandler(matcher, engagementSvc, log)
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Mount("/auth", authH.Routes())
@@ -243,6 +248,10 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 			// Profile, resumes and erasure are all the caller's own data, so they
 			// live behind authentication and read the identity from the context.
 			priv.Mount("/profile", profileH.Routes())
+			// The feed is the product. Everything under it is scoped to the caller
+			// and reads identity from the context, never from a parameter.
+			priv.Mount("/feed", feedH.Routes())
+			priv.Mount("/engagement", feedH.EngagementRoutes())
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {

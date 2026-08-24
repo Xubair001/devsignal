@@ -78,6 +78,23 @@ type EligibilityResult struct {
 	EvaluatedAt        pgtype.Timestamptz
 }
 
+// Append-only engagement log: product state, evaluation labels, and the ranking decision record. User-derived: erasure deletes these.
+type EngagementEvent struct {
+	ID                 int64
+	UserID             pgtype.UUID
+	OpportunityID      pgtype.UUID
+	EventType          string
+	DismissReason      *string
+	FitScoreAtEvent    *int16
+	MaxPossibleAtEvent *int16
+	FactorBreakdown    []byte
+	WeightsVersion     *string
+	EmbeddingVersion   *string
+	ProfileVersion     *int32
+	OpportunityVersion *int32
+	OccurredAt         pgtype.Timestamptz
+}
+
 type ErasureRequest struct {
 	ID          pgtype.UUID
 	UserID      pgtype.UUID
