@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	pgvector "github.com/pgvector/pgvector-go"
 )
 
 const completeErasureRequest = `-- name: CompleteErasureRequest :exec
@@ -30,6 +31,7 @@ func (q *Queries) CompleteErasureRequest(ctx context.Context, id pgtype.UUID) er
 const countUserTraces = `-- name: CountUserTraces :one
 SELECT (SELECT count(*) FROM profile p        WHERE p.user_id  = $1)
      + (SELECT count(*) FROM profile_skill ps WHERE ps.user_id = $1)
+     + (SELECT count(*) FROM profile_embedding pe WHERE pe.user_id = $1)
      + (SELECT count(*) FROM resume r         WHERE r.user_id  = $1)
      + (SELECT count(*) FROM user_session us  WHERE us.user_id = $1)
      + (SELECT count(*) FROM refresh_token rt WHERE rt.user_id = $1)
@@ -116,6 +118,21 @@ DELETE FROM profile WHERE user_id = $1
 
 func (q *Queries) DeleteProfileData(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteProfileData, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteProfileEmbedding = `-- name: DeleteProfileEmbedding :execrows
+DELETE FROM profile_embedding WHERE user_id = $1
+`
+
+// Erasure. The app_user cascade would remove these anyway, but an enumerated
+// delete is what lets the report state a count for this store instead of
+// attributing it to the user row.
+func (q *Queries) DeleteProfileEmbedding(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProfileEmbedding, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -239,7 +256,7 @@ func (q *Queries) GetErasureRequest(ctx context.Context, id pgtype.UUID) (Erasur
 }
 
 const getProfile = `-- name: GetProfile :one
-SELECT user_id, tenant_id, headline, years_experience, seniority_ordinal, is_management, target_role_families, target_countries, work_mode_preference, languages, min_salary_minor, salary_currency, salary_period, work_authorization, profile_version, created_at, updated_at FROM profile WHERE user_id = $1
+SELECT user_id, tenant_id, headline, years_experience, seniority_ordinal, is_management, target_role_families, target_countries, work_mode_preference, languages, min_salary_minor, salary_currency, salary_period, work_authorization, profile_version, created_at, updated_at, target_employment_types FROM profile WHERE user_id = $1
 `
 
 func (q *Queries) GetProfile(ctx context.Context, userID pgtype.UUID) (Profile, error) {
@@ -263,6 +280,42 @@ func (q *Queries) GetProfile(ctx context.Context, userID pgtype.UUID) (Profile, 
 		&i.ProfileVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TargetEmploymentTypes,
+	)
+	return i, err
+}
+
+const getProfileEmbedding = `-- name: GetProfileEmbedding :one
+SELECT pe.embedding, pe.embedding_model, pe.profile_version AS embedded_profile_version,
+       p.profile_version AS current_profile_version
+  FROM profile_embedding pe
+  JOIN profile p ON p.user_id = pe.user_id
+ WHERE pe.user_id = $1
+   AND pe.embedding_version = $2
+`
+
+type GetProfileEmbeddingParams struct {
+	UserID           pgtype.UUID
+	EmbeddingVersion string
+}
+
+type GetProfileEmbeddingRow struct {
+	Embedding              pgvector.Vector
+	EmbeddingModel         string
+	EmbeddedProfileVersion int32
+	CurrentProfileVersion  int32
+}
+
+// Returns the vector with the profile version it was built from, so the caller
+// can tell a current vector from one that predates the latest profile edit.
+func (q *Queries) GetProfileEmbedding(ctx context.Context, arg GetProfileEmbeddingParams) (GetProfileEmbeddingRow, error) {
+	row := q.db.QueryRow(ctx, getProfileEmbedding, arg.UserID, arg.EmbeddingVersion)
+	var i GetProfileEmbeddingRow
+	err := row.Scan(
+		&i.Embedding,
+		&i.EmbeddingModel,
+		&i.EmbeddedProfileVersion,
+		&i.CurrentProfileVersion,
 	)
 	return i, err
 }
@@ -443,6 +496,44 @@ func (q *Queries) ListUserResumes(ctx context.Context, userID pgtype.UUID) ([]Re
 	return items, nil
 }
 
+const putProfileEmbedding = `-- name: PutProfileEmbedding :exec
+INSERT INTO profile_embedding (
+    user_id, embedding_model, embedding_version, embedding_dim, embedding, profile_version
+) VALUES (
+    $1, $2, $3,
+    $4, $5, $6
+)
+ON CONFLICT (user_id, embedding_version) DO UPDATE
+   SET embedding       = excluded.embedding,
+       embedding_model = excluded.embedding_model,
+       embedding_dim   = excluded.embedding_dim,
+       profile_version = excluded.profile_version,
+       updated_at      = now()
+`
+
+type PutProfileEmbeddingParams struct {
+	UserID           pgtype.UUID
+	EmbeddingModel   string
+	EmbeddingVersion string
+	EmbeddingDim     int32
+	Embedding        pgvector.Vector
+	ProfileVersion   int32
+}
+
+// Upsert per (user, version) so a profile edit refreshes the vector in place and
+// a version migration can dual-write.
+func (q *Queries) PutProfileEmbedding(ctx context.Context, arg PutProfileEmbeddingParams) error {
+	_, err := q.db.Exec(ctx, putProfileEmbedding,
+		arg.UserID,
+		arg.EmbeddingModel,
+		arg.EmbeddingVersion,
+		arg.EmbeddingDim,
+		arg.Embedding,
+		arg.ProfileVersion,
+	)
+	return err
+}
+
 const recordErasureStep = `-- name: RecordErasureStep :exec
 INSERT INTO erasure_step (request_id, location, status, items, detail, completed_at)
 VALUES ($1,$2,$3,$4,$5, now())
@@ -517,8 +608,9 @@ const upsertProfile = `-- name: UpsertProfile :one
 INSERT INTO profile (
     user_id, tenant_id, headline, years_experience, seniority_ordinal, is_management,
     target_role_families, target_countries, work_mode_preference, languages,
-    min_salary_minor, salary_currency, salary_period, work_authorization
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    min_salary_minor, salary_currency, salary_period, work_authorization,
+    target_employment_types
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 ON CONFLICT (user_id) DO UPDATE SET
     headline             = EXCLUDED.headline,
     years_experience     = EXCLUDED.years_experience,
@@ -531,25 +623,27 @@ ON CONFLICT (user_id) DO UPDATE SET
     min_salary_minor     = EXCLUDED.min_salary_minor,
     salary_currency      = EXCLUDED.salary_currency,
     salary_period        = EXCLUDED.salary_period,
-    work_authorization   = EXCLUDED.work_authorization
-RETURNING user_id, tenant_id, headline, years_experience, seniority_ordinal, is_management, target_role_families, target_countries, work_mode_preference, languages, min_salary_minor, salary_currency, salary_period, work_authorization, profile_version, created_at, updated_at
+    work_authorization   = EXCLUDED.work_authorization,
+    target_employment_types = EXCLUDED.target_employment_types
+RETURNING user_id, tenant_id, headline, years_experience, seniority_ordinal, is_management, target_role_families, target_countries, work_mode_preference, languages, min_salary_minor, salary_currency, salary_period, work_authorization, profile_version, created_at, updated_at, target_employment_types
 `
 
 type UpsertProfileParams struct {
-	UserID             pgtype.UUID
-	TenantID           pgtype.UUID
-	Headline           *string
-	YearsExperience    *int16
-	SeniorityOrdinal   *int16
-	IsManagement       bool
-	TargetRoleFamilies []string
-	TargetCountries    []string
-	WorkModePreference *string
-	Languages          []string
-	MinSalaryMinor     *int64
-	SalaryCurrency     *string
-	SalaryPeriod       *string
-	WorkAuthorization  []byte
+	UserID                pgtype.UUID
+	TenantID              pgtype.UUID
+	Headline              *string
+	YearsExperience       *int16
+	SeniorityOrdinal      *int16
+	IsManagement          bool
+	TargetRoleFamilies    []string
+	TargetCountries       []string
+	WorkModePreference    *string
+	Languages             []string
+	MinSalaryMinor        *int64
+	SalaryCurrency        *string
+	SalaryPeriod          *string
+	WorkAuthorization     []byte
+	TargetEmploymentTypes []string
 }
 
 func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (Profile, error) {
@@ -568,6 +662,7 @@ func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (P
 		arg.SalaryCurrency,
 		arg.SalaryPeriod,
 		arg.WorkAuthorization,
+		arg.TargetEmploymentTypes,
 	)
 	var i Profile
 	err := row.Scan(
@@ -588,6 +683,7 @@ func (q *Queries) UpsertProfile(ctx context.Context, arg UpsertProfileParams) (P
 		&i.ProfileVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TargetEmploymentTypes,
 	)
 	return i, err
 }

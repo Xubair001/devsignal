@@ -2,8 +2,9 @@
 INSERT INTO profile (
     user_id, tenant_id, headline, years_experience, seniority_ordinal, is_management,
     target_role_families, target_countries, work_mode_preference, languages,
-    min_salary_minor, salary_currency, salary_period, work_authorization
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    min_salary_minor, salary_currency, salary_period, work_authorization,
+    target_employment_types
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 ON CONFLICT (user_id) DO UPDATE SET
     headline             = EXCLUDED.headline,
     years_experience     = EXCLUDED.years_experience,
@@ -16,7 +17,8 @@ ON CONFLICT (user_id) DO UPDATE SET
     min_salary_minor     = EXCLUDED.min_salary_minor,
     salary_currency      = EXCLUDED.salary_currency,
     salary_period        = EXCLUDED.salary_period,
-    work_authorization   = EXCLUDED.work_authorization
+    work_authorization   = EXCLUDED.work_authorization,
+    target_employment_types = EXCLUDED.target_employment_types
 RETURNING *;
 
 -- name: GetProfile :one
@@ -133,9 +135,42 @@ DELETE FROM app_user WHERE id = $1;
 -- is ambiguous to the planner.
 SELECT (SELECT count(*) FROM profile p        WHERE p.user_id  = sqlc.arg(user_id))
      + (SELECT count(*) FROM profile_skill ps WHERE ps.user_id = sqlc.arg(user_id))
+     + (SELECT count(*) FROM profile_embedding pe WHERE pe.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM resume r         WHERE r.user_id  = sqlc.arg(user_id))
      + (SELECT count(*) FROM user_session us  WHERE us.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM refresh_token rt WHERE rt.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM user_token ut    WHERE ut.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM app_user au      WHERE au.id      = sqlc.arg(user_id))
        AS traces;
+
+-- name: DeleteProfileEmbedding :execrows
+-- Erasure. The app_user cascade would remove these anyway, but an enumerated
+-- delete is what lets the report state a count for this store instead of
+-- attributing it to the user row.
+DELETE FROM profile_embedding WHERE user_id = sqlc.arg(user_id);
+
+-- name: PutProfileEmbedding :exec
+-- Upsert per (user, version) so a profile edit refreshes the vector in place and
+-- a version migration can dual-write.
+INSERT INTO profile_embedding (
+    user_id, embedding_model, embedding_version, embedding_dim, embedding, profile_version
+) VALUES (
+    sqlc.arg(user_id), sqlc.arg(embedding_model), sqlc.arg(embedding_version),
+    sqlc.arg(embedding_dim), sqlc.arg(embedding), sqlc.arg(profile_version)
+)
+ON CONFLICT (user_id, embedding_version) DO UPDATE
+   SET embedding       = excluded.embedding,
+       embedding_model = excluded.embedding_model,
+       embedding_dim   = excluded.embedding_dim,
+       profile_version = excluded.profile_version,
+       updated_at      = now();
+
+-- name: GetProfileEmbedding :one
+-- Returns the vector with the profile version it was built from, so the caller
+-- can tell a current vector from one that predates the latest profile edit.
+SELECT pe.embedding, pe.embedding_model, pe.profile_version AS embedded_profile_version,
+       p.profile_version AS current_profile_version
+  FROM profile_embedding pe
+  JOIN profile p ON p.user_id = pe.user_id
+ WHERE pe.user_id = sqlc.arg(user_id)
+   AND pe.embedding_version = sqlc.arg(embedding_version);

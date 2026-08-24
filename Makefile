@@ -130,11 +130,15 @@ test-db: ## (re)create the disposable integration database
 	  -c "CREATE DATABASE $(TEST_DB_NAME);"
 	@migrate -path migrations -database "$(DB_TEST_URL)" up
 
+# -p 1 serializes package test binaries. All packages share the one test
+# database, and the queue tests claim rows table-wide by design — a worker has to
+# be able to claim any due row. Run concurrently, one package's fixtures get
+# claimed by another package's worker test.
 .PHONY: test-integration
 test-integration: test-db ## integration tests against a disposable database (needs make up)
 	DATABASE_URL="$(DB_TEST_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
 	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
-	go test -tags integration -count=1 -timeout 300s ./...
+	go test -tags integration -count=1 -timeout 300s -p 1 ./...
 
 .PHONY: eval
 eval: ## [step 16] ranking evaluation harness — gates scoring changes

@@ -7,17 +7,21 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–13 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–14 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
-embeddings with vector search. It ingests real postings from multiple boards:
+embeddings with vector search, and two-channel retrieval. It ingests real postings from
+multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
 
-Next: step 14 (retrieval / candidate generation), then 15 (eligibility gate + fit score) and
-16 (the eval harness, which is what will decide whether the local embedder stays).
+`--role=retrieve --user=<id>` prints the predicates, eligible count and per-channel coverage
+for one user — the operational answer to "why am I not seeing X".
+
+Next: step 15 (eligibility gate + fit score + explanation), then 16 (the eval harness, which
+is what will decide whether the local embedder stays).
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -176,6 +180,19 @@ blueprint's audit found.
     return fewer rows than asked for, because a filter outside the index is applied after the
     graph walk. `TestEveryLiveEmbeddingVersionHasAPartialIndex` fails if a version has vectors
     no index covers.
+
+21. **Retrieval channels carry their predicates inside the query, and never force an index.**
+    Filtering after a kNN walk throws away candidates the walk already spent its budget on:
+    measured on 50k vectors with a 1%-selective predicate, asking for 100 returned 4. The fix
+    is `hnsw.iterative_scan` (set per transaction with SET LOCAL) plus leaving the planner free
+    to choose — with a small eligible set it uses an exact scan and returns everything, which
+    is both correct and cheap. Forcing the index re-creates the bug.
+
+22. **A retrieval channel that matches most of the corpus is broken, not generous.** Stage 1
+    exists to bound downstream work. The keyword channel matches titles only: over
+    title + description it returned all 199 real postings, because company boilerplate names
+    the company's own platform in every description. Over titles it returned 34, all genuine
+    matches. Description semantics belong to the vector channel, which embeds the full text.
 
 ## The two numbers
 

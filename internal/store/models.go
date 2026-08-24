@@ -227,23 +227,35 @@ type OpportunitySource struct {
 }
 
 type Profile struct {
-	UserID             pgtype.UUID
-	TenantID           pgtype.UUID
-	Headline           *string
-	YearsExperience    *int16
-	SeniorityOrdinal   *int16
-	IsManagement       bool
-	TargetRoleFamilies []string
-	TargetCountries    []string
-	WorkModePreference *string
-	Languages          []string
-	MinSalaryMinor     *int64
-	SalaryCurrency     *string
-	SalaryPeriod       *string
-	WorkAuthorization  []byte
-	ProfileVersion     int32
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
+	UserID                pgtype.UUID
+	TenantID              pgtype.UUID
+	Headline              *string
+	YearsExperience       *int16
+	SeniorityOrdinal      *int16
+	IsManagement          bool
+	TargetRoleFamilies    []string
+	TargetCountries       []string
+	WorkModePreference    *string
+	Languages             []string
+	MinSalaryMinor        *int64
+	SalaryCurrency        *string
+	SalaryPeriod          *string
+	WorkAuthorization     []byte
+	ProfileVersion        int32
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	TargetEmploymentTypes []string
+}
+
+// Profile vectors by version. Erasure deletes via the app_user cascade.
+type ProfileEmbedding struct {
+	UserID           pgtype.UUID
+	EmbeddingModel   string
+	EmbeddingVersion string
+	EmbeddingDim     int32
+	Embedding        pgvector.Vector
+	ProfileVersion   int32
+	UpdatedAt        pgtype.Timestamptz
 }
 
 type ProfileSkill struct {

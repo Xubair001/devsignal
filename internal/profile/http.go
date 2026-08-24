@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/store"
@@ -16,11 +18,27 @@ import (
 
 type Handler struct {
 	svc *Service
-	log *slog.Logger
+	// vectors keeps the profile's embedding in step with its content. Nil is
+	// allowed so tests and tools can construct a handler without an embedder,
+	// but a nil refresher in production means vectors never update, so the
+	// constructor logs it rather than letting it pass silently.
+	vectors VectorRefresher
+	log     *slog.Logger
 }
 
-func NewHandler(svc *Service, log *slog.Logger) *Handler {
-	return &Handler{svc: svc, log: log}
+// VectorRefresher recomputes a user's profile vector. Satisfied by
+// profileindex.Service; an interface here so the profile package does not depend
+// on an embedder.
+type VectorRefresher interface {
+	Refresh(ctx context.Context, userID pgtype.UUID) error
+}
+
+func NewHandler(svc *Service, vectors VectorRefresher, log *slog.Logger) *Handler {
+	if vectors == nil {
+		log.Warn("profile handler built with no vector refresher; " +
+			"profile edits will not update matching")
+	}
+	return &Handler{svc: svc, vectors: vectors, log: log}
 }
 
 // Routes must be mounted BEHIND authentication: every handler here reads the
@@ -41,18 +59,20 @@ func (h *Handler) Routes() chi.Router {
 // ---------------------------------------------------------------- DTOs
 
 type profileRequest struct {
-	Headline           *string           `json:"headline"`
-	YearsExperience    *int16            `json:"years_experience"`
-	Seniority          *string           `json:"seniority"`
-	IsManagement       bool              `json:"is_management"`
-	TargetRoleFamilies []string          `json:"target_role_families"`
-	TargetCountries    []string          `json:"target_countries"`
-	WorkModePreference *string           `json:"work_mode_preference"`
-	Languages          []string          `json:"languages"`
-	MinSalaryMinor     *int64            `json:"min_salary_minor"`
-	SalaryCurrency     *string           `json:"salary_currency"`
-	SalaryPeriod       *string           `json:"salary_period"`
-	WorkAuthorization  map[string]string `json:"work_authorization"`
+	Headline           *string  `json:"headline"`
+	YearsExperience    *int16   `json:"years_experience"`
+	Seniority          *string  `json:"seniority"`
+	IsManagement       bool     `json:"is_management"`
+	TargetRoleFamilies []string `json:"target_role_families"`
+	TargetCountries    []string `json:"target_countries"`
+	WorkModePreference *string  `json:"work_mode_preference"`
+	// Empty or absent means no constraint. Retrieval reads it the same way.
+	TargetEmploymentTypes []string          `json:"target_employment_types"`
+	Languages             []string          `json:"languages"`
+	MinSalaryMinor        *int64            `json:"min_salary_minor"`
+	SalaryCurrency        *string           `json:"salary_currency"`
+	SalaryPeriod          *string           `json:"salary_period"`
+	WorkAuthorization     map[string]string `json:"work_authorization"`
 }
 
 type skillResponse struct {
@@ -64,17 +84,18 @@ type skillResponse struct {
 }
 
 type profileResponse struct {
-	Headline           *string           `json:"headline"`
-	YearsExperience    *int16            `json:"years_experience"`
-	Seniority          *string           `json:"seniority"`
-	IsManagement       bool              `json:"is_management"`
-	TargetRoleFamilies []string          `json:"target_role_families"`
-	TargetCountries    []string          `json:"target_countries"`
-	WorkModePreference *string           `json:"work_mode_preference"`
-	Languages          []string          `json:"languages"`
-	MinSalary          *money            `json:"min_salary"`
-	WorkAuthorization  map[string]string `json:"work_authorization"`
-	Skills             []skillResponse   `json:"skills"`
+	Headline              *string           `json:"headline"`
+	YearsExperience       *int16            `json:"years_experience"`
+	Seniority             *string           `json:"seniority"`
+	IsManagement          bool              `json:"is_management"`
+	TargetRoleFamilies    []string          `json:"target_role_families"`
+	TargetCountries       []string          `json:"target_countries"`
+	WorkModePreference    *string           `json:"work_mode_preference"`
+	TargetEmploymentTypes []string          `json:"target_employment_types"`
+	Languages             []string          `json:"languages"`
+	MinSalary             *money            `json:"min_salary"`
+	WorkAuthorization     map[string]string `json:"work_authorization"`
+	Skills                []skillResponse   `json:"skills"`
 	// ProfileVersion is surfaced so a client can tell whether a cached fit score
 	// it holds is still current.
 	ProfileVersion int32 `json:"profile_version"`
@@ -144,7 +165,8 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		SeniorityOrdinal: seniorityOrdinal(req.Seniority), IsManagement: req.IsManagement,
 		TargetRoleFamilies: req.TargetRoleFamilies, TargetCountries: req.TargetCountries,
 		WorkModePreference: req.WorkModePreference, Languages: req.Languages,
-		MinSalaryMinor: req.MinSalaryMinor, SalaryCurrency: req.SalaryCurrency,
+		TargetEmploymentTypes: req.TargetEmploymentTypes,
+		MinSalaryMinor:        req.MinSalaryMinor, SalaryCurrency: req.SalaryCurrency,
 		SalaryPeriod: req.SalaryPeriod,
 	}
 	if req.WorkAuthorization != nil {
@@ -160,6 +182,16 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.fail(w, r, err)
 		return
+	}
+	// The vector is derived data. A failure here degrades match quality until the
+	// next edit or backfill; it is not a reason to tell the user their own
+	// preferences failed to save. The stored profile_version makes the staleness
+	// detectable either way.
+	if h.vectors != nil {
+		if verr := h.vectors.Refresh(r.Context(), id.UserID); verr != nil {
+			h.log.Error("refreshing profile vector",
+				"user_id", id.UserID.String(), "err", verr)
+		}
 	}
 	_, skills, _ := h.svc.Get(r.Context(), id.UserID)
 	writeJSON(w, http.StatusOK, toProfileResponse(p, skills))
@@ -277,13 +309,14 @@ func toProfileResponse(p store.Profile, skills []store.ListProfileSkillsRow) pro
 	out := profileResponse{
 		Headline: p.Headline, YearsExperience: p.YearsExperience,
 		Seniority: seniorityLabel(p.SeniorityOrdinal), IsManagement: p.IsManagement,
-		TargetRoleFamilies: nonNil(p.TargetRoleFamilies),
-		TargetCountries:    nonNil(p.TargetCountries),
-		WorkModePreference: p.WorkModePreference,
-		Languages:          nonNil(p.Languages),
-		WorkAuthorization:  decodeAuth(p.WorkAuthorization),
-		ProfileVersion:     p.ProfileVersion,
-		Skills:             make([]skillResponse, 0, len(skills)),
+		TargetRoleFamilies:    nonNil(p.TargetRoleFamilies),
+		TargetEmploymentTypes: nonNil(p.TargetEmploymentTypes),
+		TargetCountries:       nonNil(p.TargetCountries),
+		WorkModePreference:    p.WorkModePreference,
+		Languages:             nonNil(p.Languages),
+		WorkAuthorization:     decodeAuth(p.WorkAuthorization),
+		ProfileVersion:        p.ProfileVersion,
+		Skills:                make([]skillResponse, 0, len(skills)),
 	}
 	if p.MinSalaryMinor != nil {
 		m := &money{MinMinor: *p.MinSalaryMinor}

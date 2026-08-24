@@ -30,14 +30,16 @@ const (
 	LocUserTokens    = "user_tokens"
 	LocUserRow       = "user_row"
 
+	// Live since step 14.
+	LocProfileEmbedding = "profile_embedding"
+
 	// Declared but not yet applicable: these stores exist in the design and will
 	// hold user-derived data at their step. Recorded as not_applicable rather
 	// than omitted, so the inventory shows they were CONSIDERED rather than
 	// forgotten.
-	LocProfileEmbedding = "profile_embedding"
-	LocSearchIndex      = "search_index"
-	LocRedisCache       = "redis_cache"
-	LocAnalytics        = "analytics_copies"
+	LocSearchIndex = "search_index"
+	LocRedisCache  = "redis_cache"
+	LocAnalytics   = "analytics_copies"
 )
 
 // AllLocations is the full inventory, in deletion order: derived artifacts
@@ -99,7 +101,7 @@ func (s *Service) Erase(ctx context.Context, userID pgtype.UUID) (*ErasureReport
 	// Declared, not yet built. Recorded so the inventory proves they were
 	// considered at this step rather than silently missed.
 	for _, loc := range []string{
-		LocProfileEmbedding, LocSearchIndex, LocRedisCache, LocAnalytics,
+		LocSearchIndex, LocRedisCache, LocAnalytics,
 	} {
 		s.step(ctx, req.ID, loc, "not_applicable", 0, "store not yet in use")
 	}
@@ -109,6 +111,9 @@ func (s *Service) Erase(ctx context.Context, userID pgtype.UUID) (*ErasureReport
 		fn  func(context.Context, pgtype.UUID) (int64, error)
 	}
 	for _, d := range []del{
+		// Before the profile row: the vector is derived from it, and losing the
+		// profile first would leave a vector nothing points at.
+		{LocProfileEmbedding, s.q.DeleteProfileEmbedding},
 		{LocResumeRows, s.q.DeleteResumeRows},
 		{LocProfileSkills, s.q.DeleteProfileSkills},
 		{LocProfile, s.q.DeleteProfileData},

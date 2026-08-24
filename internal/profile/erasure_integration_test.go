@@ -14,6 +14,7 @@ import (
 
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/dbtest"
+	"github.com/Xubair001/devsignal/internal/profileindex"
 	"github.com/Xubair001/devsignal/internal/store"
 	"github.com/Xubair001/devsignal/pkg/blob"
 )
@@ -308,4 +309,70 @@ func contains(h, n string) bool {
 		}
 	}
 	return false
+}
+
+// The profile vector became a real store in step 14. It was previously reported
+// as not_applicable, so a failure to wire the delete would look like a passing
+// erasure — the exact failure mode the location inventory exists to prevent.
+func TestErasureRemovesTheProfileVector(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	svc := testService(t, pool)
+	userID, tenantID := newUser(t, pool)
+
+	head := "Senior Backend Engineer, Go and PostgreSQL"
+	if _, err := svc.Save(ctx, userID, tenantID, Input{
+		Headline: &head, TargetRoleFamilies: []string{"backend"},
+	}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+	if err := profileindex.New(pool, profileindex.Local(), quiet()).
+		Refresh(ctx, userID); err != nil {
+		t.Fatalf("building the vector: %v", err)
+	}
+
+	var before int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM profile_embedding WHERE user_id=$1`, userID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if before == 0 {
+		t.Fatal("no vector was stored; the test would pass for the wrong reason")
+	}
+
+	rep, err := svc.Erase(ctx, userID)
+	if err != nil {
+		t.Fatalf("erase: %v", err)
+	}
+
+	var after int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM profile_embedding WHERE user_id=$1`, userID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != 0 {
+		t.Errorf("%d profile vectors survived erasure", after)
+	}
+
+	// And the report must claim it, rather than attributing the removal to the
+	// user-row cascade or still calling the store unused.
+	var step *store.ListErasureStepsRow
+	for i := range rep.Steps {
+		if rep.Steps[i].Location == LocProfileEmbedding {
+			step = &rep.Steps[i]
+		}
+	}
+	if step == nil {
+		t.Fatal("no erasure step recorded for the profile vector")
+	}
+	if step.Status != "done" {
+		t.Errorf("profile vector step status = %q, want \"done\" now the store is in use", step.Status)
+	}
+	if step.Items < 1 {
+		t.Errorf("profile vector step reported %d items removed, want at least 1",
+			step.Items)
+	}
+	if !rep.Complete || rep.TracesRemaining != 0 {
+		t.Errorf("erasure incomplete: complete=%v traces=%d", rep.Complete, rep.TracesRemaining)
+	}
 }

@@ -41,11 +41,14 @@ type Input struct {
 	TargetRoleFamilies []string
 	TargetCountries    []string
 	WorkModePreference *string
-	Languages          []string
-	MinSalaryMinor     *int64
-	SalaryCurrency     *string
-	SalaryPeriod       *string
-	WorkAuthorization  []byte
+	// Empty means no constraint. Retrieval treats it that way too — see
+	// retrieve.CriteriaFromProfile.
+	TargetEmploymentTypes []string
+	Languages             []string
+	MinSalaryMinor        *int64
+	SalaryCurrency        *string
+	SalaryPeriod          *string
+	WorkAuthorization     []byte
 }
 
 func (s *Service) Save(ctx context.Context, userID, tenantID pgtype.UUID, in Input) (store.Profile, error) {
@@ -77,6 +80,7 @@ func (s *Service) Save(ctx context.Context, userID, tenantID pgtype.UUID, in Inp
 		WorkModePreference: in.WorkModePreference, Languages: langs,
 		MinSalaryMinor: in.MinSalaryMinor, SalaryCurrency: in.SalaryCurrency,
 		SalaryPeriod: in.SalaryPeriod, WorkAuthorization: auth,
+		TargetEmploymentTypes: nonNil(in.TargetEmploymentTypes),
 	})
 	if err != nil {
 		return store.Profile{}, fmt.Errorf("saving profile: %w", err)

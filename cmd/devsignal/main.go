@@ -31,6 +31,8 @@ import (
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
 	"github.com/Xubair001/devsignal/internal/profile"
+	"github.com/Xubair001/devsignal/internal/profileindex"
+	"github.com/Xubair001/devsignal/internal/retrieve"
 	"github.com/Xubair001/devsignal/internal/source"
 
 	// Importing an adapter family is what enables it.
@@ -44,20 +46,34 @@ import (
 
 func main() {
 	role := flag.String("role", "api",
-		"api | worker | ingest-once | add-source | add-sources | source-health | spend | digest | admin")
+		"api | worker | ingest-once | add-source | add-sources | source-health | "+
+			"spend | retrieve | reindex-profiles | digest | admin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
+	userID := flag.String("user", "", "user id (retrieve)")
 	flag.Parse()
 
-	if err := run(*role, *srcName, *srcFile, *reviewer); err != nil {
+	if err := run(*role, flags{
+		source: *srcName, file: *srcFile, reviewer: *reviewer, user: *userID,
+	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(role, srcName, srcFile, reviewer string) error {
+// flags carries the role-specific arguments. A struct rather than positional
+// strings: the roles that take arguments now outnumber the ones that do not, and
+// four same-typed parameters in a row are trivial to transpose at a call site.
+type flags struct {
+	source   string
+	file     string
+	reviewer string
+	user     string
+}
+
+func run(role string, f flags) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -102,15 +118,19 @@ func run(role, srcName, srcFile, reviewer string) error {
 	case "worker":
 		return runWorkers(ctx, cfg, log, pool)
 	case "add-source":
-		return addSource(ctx, log, pool, srcName)
+		return addSource(ctx, log, pool, f.source)
 	case "ingest-once":
-		return ingestOnce(ctx, log, pool, srcName)
+		return ingestOnce(ctx, log, pool, f.source)
 	case "add-sources":
-		return addSources(ctx, log, pool, srcFile, reviewer)
+		return addSources(ctx, log, pool, f.file, f.reviewer)
 	case "source-health":
 		return sourceHealthReport(ctx, pool)
 	case "spend":
 		return spendReport(ctx, pool)
+	case "retrieve":
+		return retrieveReport(ctx, pool, f.user)
+	case "reindex-profiles":
+		return reindexProfiles(ctx, log, pool)
 	case "digest", "admin":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
@@ -188,7 +208,10 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 	if err != nil {
 		return fmt.Errorf("object storage: %w", err)
 	}
-	profileH := profile.NewHandler(profile.NewService(pool, store2, log), log)
+	profileH := profile.NewHandler(
+		profile.NewService(pool, store2, log),
+		profileindex.New(pool, profileindex.Local(), log),
+		log)
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Mount("/auth", authH.Routes())
@@ -574,4 +597,143 @@ func spendReport(ctx context.Context, pool *pgxpool.Pool) error {
 			r.Calls, r.InputTokens, r.OutputTokens, r.CacheReadTokens, share)
 	}
 	return nil
+}
+
+// retrieveReport shows what stage 1 returns for one user, and why.
+//
+// The operational question this answers is "why am I not seeing role X". Without
+// it the honest answer is a guess, because retrieval's failure mode is silence:
+// a predicate that excluded everything and a corpus that holds nothing look
+// identical from outside. Printing the predicates, the eligible count and the
+// per-channel coverage separates them.
+func retrieveReport(ctx context.Context, pool *pgxpool.Pool, userID string) error {
+	if userID == "" {
+		return fmt.Errorf("--user is required")
+	}
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return fmt.Errorf("parsing --user: %w", err)
+	}
+
+	q := store.New(pool)
+	prof, err := q.GetProfile(ctx, uid)
+	if err != nil {
+		return fmt.Errorf("loading profile: %w", err)
+	}
+	c := retrieve.CriteriaFromProfile(prof)
+
+	fmt.Printf("user             %s (profile version %d)\n", userID, prof.ProfileVersion)
+	fmt.Printf("countries        %v\n", orAny(prof.TargetCountries))
+	fmt.Printf("work mode        %s\n", orAnyPtr(prof.WorkModePreference))
+	fmt.Printf("employment       %v\n", orAny(prof.TargetEmploymentTypes))
+	fmt.Printf("languages        %v\n", orAny(prof.Languages))
+	fmt.Printf("keyword terms    %s\n", orAnyStr(c.Terms))
+
+	res, _, err := retrieve.New(pool).RetrieveForProfile(
+		ctx, uid, embed.LocalVersion, retrieve.DefaultMaxCandidates)
+	if err != nil {
+		if errors.Is(err, retrieve.ErrNoVector) {
+			fmt.Printf("\nno profile vector for embedding version %q.\n"+
+				"run --role=reindex-profiles to build it.\n", embed.LocalVersion)
+			return nil
+		}
+		return err
+	}
+
+	fmt.Printf("\neligible after predicates   %d\n", res.Eligible)
+	fmt.Printf("candidates returned         %d (%.1f%% of eligible)\n",
+		len(res.Candidates), res.CoverageRatio()*100)
+	if res.Truncated {
+		fmt.Printf("  capped at %d; the set is not exhaustive\n", retrieve.DefaultMaxCandidates)
+	}
+	for _, cv := range res.Coverage {
+		note := ""
+		if cv.Underfilled(res.Eligible) {
+			// Worth saying out loud: this is the shape of a lost-candidate bug.
+			note = "  <- returned less than requested while eligible postings remained"
+		}
+		fmt.Printf("  channel %-8s requested %-5d returned %-5d%s\n",
+			cv.Channel, cv.Requested, cv.Returned, note)
+	}
+
+	fmt.Printf("\ntop candidates (retrieval order, NOT a ranking):\n")
+	for i, cand := range res.Candidates {
+		if i >= 15 {
+			fmt.Printf("  ... %d more\n", len(res.Candidates)-15)
+			break
+		}
+		fmt.Printf("  %-52s  channels=%v\n", truncate(cand.TitleRaw, 52), cand.Channels)
+	}
+	return nil
+}
+
+// reindexProfiles rebuilds every profile vector. Needed after an embedding
+// version change, and after any period where the refresh-on-save path failed.
+func reindexProfiles(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error {
+	rows, err := pool.Query(ctx, `SELECT user_id FROM profile`)
+	if err != nil {
+		return fmt.Errorf("listing profiles: %w", err)
+	}
+	var ids []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	idx := profileindex.New(pool, profileindex.Local(), log)
+	var done, empty, failed int
+	for _, id := range ids {
+		switch err := idx.Refresh(ctx, id); {
+		case err == nil:
+			done++
+		case errors.Is(err, profileindex.ErrEmptyProfile):
+			// Not a failure: a profile with nothing in it has nothing to embed.
+			empty++
+		default:
+			log.Error("reindexing profile", "user_id", id.String(), "err", err)
+			failed++
+		}
+	}
+	fmt.Printf("profiles reindexed %d, empty %d, failed %d (version %s)\n",
+		done, empty, failed, embed.LocalVersion)
+	if failed > 0 {
+		return fmt.Errorf("%d profiles failed to reindex", failed)
+	}
+	return nil
+}
+
+func orAny(v []string) string {
+	if len(v) == 0 {
+		return "(any)"
+	}
+	return strings.Join(v, ",")
+}
+
+func orAnyPtr(v *string) string {
+	if v == nil || *v == "" {
+		return "(any)"
+	}
+	return *v
+}
+
+func orAnyStr(v string) string {
+	if v == "" {
+		return "(none - keyword channel disabled)"
+	}
+	return v
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }
