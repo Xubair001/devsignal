@@ -7,16 +7,17 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–12 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–13 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
-profile with resume ingestion and verified erasure, and cached LLM extraction. It ingests real
-postings from multiple boards:
+profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
+embeddings with vector search. It ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
 
-Next: step 13 (embeddings with version columns), then step 14 (retrieval).
+Next: step 14 (retrieval / candidate generation), then 15 (eligibility gate + fit score) and
+16 (the eval harness, which is what will decide whether the local embedder stays).
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -167,6 +168,15 @@ blueprint's audit found.
 19. **Do not add NATS, OpenSearch or Kubernetes until its blueprint §36 trigger fires.** They are
     earned migrations with a measurement attached, not starting conditions. v1 is Postgres + Redis.
 
+20. **A new embedding version ships with its own partial HNSW index, in the same migration.**
+    Retrieval always filters by `embedding_version`, since distances across models are
+    meaningless. An unconditional HNSW index cannot serve that filter: measured on 50k vectors
+    with the queried version holding 1,000 of them — the shape of every rollout — the planner
+    fell back to a sequential scan, 12.6 ms against 0.99 ms, growing linearly. It can also
+    return fewer rows than asked for, because a filter outside the index is applied after the
+    graph walk. `TestEveryLiveEmbeddingVersionHasAPartialIndex` fails if a version has vectors
+    no index covers.
+
 ## The two numbers
 
 The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
@@ -258,9 +268,15 @@ make fmt vet lint          # gofmt, go vet, golangci-lint, staticcheck
 make test                  # unit, with -race
 make test-golden           # source parser fixtures — the ones that catch real breakage
 make eval                  # NDCG@10 / Precision@7 / coverage. Gates scoring changes
-make test-integration      # Postgres + Redis via Compose
+make test-integration      # provisions a disposable database, then runs the suite
 make check-erasure         # asserts a deleted identifier appears nowhere
 ```
+
+The integration suite is destructive — the queue tests claim and advance rows table-wide,
+because that is what a worker does. It therefore runs only against a database whose name ends
+in `_test`, provisioned and dropped per run by `make test-db`; `internal/dbtest` refuses
+anything else. Do not hand it `DATABASE_URL` for a database you care about, and do not "fix"
+that refusal by relaxing the check.
 
 Before calling anything done, walk blueprint §38's production readiness gate. It is binary.
 

@@ -113,6 +113,17 @@ func (w *Worker) handleOne(ctx context.Context, it Item) {
 		// The handler advanced the row itself, in the same statement as its write.
 		return
 	}
+	if errors.Is(err, ErrRetryLater) {
+		// Systemic: log loudly (a misconfiguration must not be silent) but do not
+		// burn the attempt budget, and back off further than a normal retry so a
+		// provider outage does not become a self-inflicted load test.
+		w.log.Warn("systemic failure; deferring without spending an attempt",
+			"id", it.ID.String(), "err", err)
+		if derr := w.queue.Defer(ctx, it, w.queue.cfg.SystemicBackoff); derr != nil {
+			w.log.Error("deferring item", "id", it.ID.String(), "err", derr)
+		}
+		return
+	}
 	if errors.Is(err, ErrVersionConflict) {
 		// Another stage got there first. Leave it; the next claim or the sweeper
 		// picks it up with a fresh version.

@@ -77,7 +77,9 @@ func (s *Service) Extract(ctx context.Context, contentHash []byte, text, lane st
 
 	raw, err := s.provider.Extract(ctx, text)
 	if err != nil {
-		return nil, err
+		// Classified here, not in the provider, so every implementation gets the
+		// same systemic-versus-document policy.
+		return nil, ClassifyProviderError(err)
 	}
 
 	result, err := Validate(raw.JSON)

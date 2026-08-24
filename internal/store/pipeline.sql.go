@@ -197,6 +197,27 @@ func (q *Queries) CreateOpportunity(ctx context.Context, arg CreateOpportunityPa
 	return i, err
 }
 
+const deferItem = `-- name: DeferItem :exec
+UPDATE opportunity
+   SET next_attempt_at = now() + $1::interval,
+       lease_until = NULL,
+       attempts = GREATEST(attempts - 1, 0)
+ WHERE id = $2
+`
+
+type DeferItemParams struct {
+	Delay pgtype.Interval
+	ID    pgtype.UUID
+}
+
+// Put an item back WITHOUT spending an attempt. ClaimBatch already incremented
+// attempts on the way in, so it is decremented here: a systemic failure must not
+// consume a budget that exists for individually-bad records.
+func (q *Queries) DeferItem(ctx context.Context, arg DeferItemParams) error {
+	_, err := q.db.Exec(ctx, deferItem, arg.Delay, arg.ID)
+	return err
+}
+
 const deleteOpportunitiesForCompany = `-- name: DeleteOpportunitiesForCompany :execrows
 DELETE FROM opportunity WHERE company_id = $1
 `

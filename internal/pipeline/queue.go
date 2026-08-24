@@ -27,6 +27,16 @@ var ErrVersionConflict = errors.New("pipeline: version conflict")
 // every item succeeds, every advance conflicts, nothing ever progresses.
 var ErrHandled = errors.New("pipeline: handled by stage")
 
+// ErrRetryLater means the failure is SYSTEMIC, not this record's fault — a
+// missing credential, a provider outage, a misconfiguration.
+//
+// Spending the attempt budget on it is wrong twice over: the budget exists to
+// give up on records that are individually bad, and a systemic fault fails
+// identically for every record, so N attempts just multiply the noise. The item
+// is deferred without consuming an attempt, so the moment the cause is fixed the
+// backlog drains on its own.
+var ErrRetryLater = errors.New("pipeline: retry later, systemic failure")
+
 type Config struct {
 	BatchSize     int32
 	Lease         time.Duration
@@ -35,6 +45,10 @@ type Config struct {
 	MaxBackoff    time.Duration
 	SweepAfter    time.Duration
 	SweepInterval time.Duration
+	// SystemicBackoff is how long to wait after a systemic failure. Longer than a
+	// normal retry: hammering a provider that is down or misconfigured helps
+	// nobody.
+	SystemicBackoff time.Duration
 }
 
 func DefaultConfig() Config {
@@ -47,8 +61,9 @@ func DefaultConfig() Config {
 		BaseBackoff: 30 * time.Second,
 		MaxBackoff:  1 * time.Hour,
 		// Blueprint SLO: no record in a non-terminal state for more than an hour.
-		SweepAfter:    30 * time.Minute,
-		SweepInterval: 5 * time.Minute,
+		SweepAfter:      30 * time.Minute,
+		SweepInterval:   5 * time.Minute,
+		SystemicBackoff: 2 * time.Minute,
 	}
 }
 
@@ -143,6 +158,19 @@ func (qu *Queue) backoff(attempts int32) time.Duration {
 		return qu.cfg.MaxBackoff
 	}
 	return d
+}
+
+// Defer puts an item back without spending an attempt.
+//
+// Used for systemic failures: the record is fine, the world is not. Attempts is
+// decremented because ClaimBatch already incremented it on the way in.
+func (qu *Queue) Defer(ctx context.Context, it Item, delay time.Duration) error {
+	if err := qu.q.DeferItem(ctx, store.DeferItemParams{
+		Delay: pgInterval(delay), ID: it.ID,
+	}); err != nil {
+		return fmt.Errorf("deferring: %w", err)
+	}
+	return nil
 }
 
 // Release drops a lease without advancing. Used on graceful shutdown so a clean

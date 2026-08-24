@@ -112,8 +112,13 @@ jobs:
       # The guarantees that matter live here: SKIP LOCKED isolation, refresh-token
       # replay revocation, absence-based closure, dedup precision. Running
       # migrations without ever querying through them proves very little.
+      #
+      # Through `make`, not a bare `go test`, so CI and a developer's machine run
+      # the identical path: the target provisions a disposable database, and the
+      # suite refuses to run anywhere else. CI happens to start clean, which is
+      # exactly why it could never have caught the tests mutating real data.
       - name: integration tests
-        run: go test -tags integration -count=1 -timeout 300s ./...
+        run: make test-integration DB_URL="$DATABASE_URL"
 
       - name: schema sanity
         run: |

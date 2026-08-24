@@ -25,6 +25,7 @@ import (
 
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
+	"github.com/Xubair001/devsignal/internal/embed"
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/ingest"
 	"github.com/Xubair001/devsignal/internal/opportunity"
@@ -291,6 +292,11 @@ func runWorkers(ctx context.Context, appCfg *config.Config, log *slog.Logger, po
 	}
 	enricher := stages.NewEnricher(pool, enrich.NewService(pool, provider, log), log)
 
+	// Local, deterministic and free by default. A hosted model drops in behind
+	// the interface once the eval harness shows retrieval quality justifies the
+	// cost and the data egress — measured before buying, not after.
+	embedder := stages.NewEmbedder(pool, embed.NewLocal(), log)
+
 	// Concurrency per stage is set independently — that is the whole point of
 	// separating them (blueprint §25). AI work will be the bottleneck, not fetch.
 	pipelineStages := []pipeline.Stage{
@@ -306,7 +312,9 @@ func runWorkers(ctx context.Context, appCfg *config.Config, log *slog.Logger, po
 		// component, and it is the bottleneck the blueprint expects to scale
 		// independently (§25).
 		{State: pipeline.StateDeduped, Concurrency: 2, Handle: enricher.Handle},
-		{State: pipeline.StateEnriched, Concurrency: 2, Handle: passthrough}, // embeddings: step 13
+		// Local embedding is CPU-bound rather than rate-limited, so it can run
+		// wider than extraction.
+		{State: pipeline.StateEnriched, Concurrency: 4, Handle: embedder.Handle},
 		{State: pipeline.StateEmbedded, Concurrency: 2, Handle: passthrough},
 	}
 

@@ -246,3 +246,71 @@ func TestSpendIsReportable(t *testing.T) {
 		t.Error("the model's spend does not appear in the report")
 	}
 }
+
+// A systemic fault — no credentials, provider down — must NOT consume a
+// posting's retry budget. That budget exists to give up on individually-bad
+// records; a systemic fault fails identically for every one of them, so spending
+// it there just multiplies noise and delays recovery once the cause is fixed.
+func TestSystemicProviderFaultDoesNotBurnAttempts(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	hash := []byte("systemic-" + uuid.NewString())
+	ids := seedForEnrichment(t, pool, 1, hash)
+	id := ids[0]
+
+	// The exact shape the SDK produces with no key configured.
+	fp := &countingProvider{err: errors.New(
+		"no Anthropic credentials found. The SDK tried these sources in order: " +
+			"1. ANTHROPIC_API_KEY env var: not set")}
+	e := NewEnricher(pool, enrich.NewService(pool, fp, quiet()), quiet())
+	q := store.New(pool)
+
+	row, err := q.GetOpportunityState(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handleErr := e.Handle(ctx, pipeline.Item{
+		ID: id, Version: row.Version, State: pipeline.StateDeduped, Attempts: row.Attempts,
+	})
+	if !errors.Is(handleErr, pipeline.ErrRetryLater) {
+		t.Fatalf("got %v, want ErrRetryLater: a credential fault is systemic", handleErr)
+	}
+	if !errors.Is(handleErr, enrich.ErrProviderUnavailable) {
+		t.Error("the underlying cause should still be inspectable")
+	}
+
+	// And it must stay in a retryable state rather than parking.
+	after, err := q.GetOpportunityState(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.PipelineState != string(pipeline.StateDeduped) {
+		t.Errorf("state = %q, want deduped: a systemic fault must not advance or park",
+			after.PipelineState)
+	}
+}
+
+// A document-specific fault is the opposite case: it IS this record's fault, so
+// it consumes the budget and eventually degrades.
+func TestDocumentFaultIsNotTreatedAsSystemic(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	hash := []byte("docfault-" + uuid.NewString())
+	ids := seedForEnrichment(t, pool, 1, hash)
+
+	fp := &countingProvider{err: enrich.ErrInvalidOutput}
+	e := NewEnricher(pool, enrich.NewService(pool, fp, quiet()), quiet())
+	q := store.New(pool)
+	row, _ := q.GetOpportunityState(ctx, ids[0])
+
+	err := e.Handle(ctx, pipeline.Item{
+		ID: ids[0], Version: row.Version, State: pipeline.StateDeduped,
+	})
+	if errors.Is(err, pipeline.ErrRetryLater) {
+		t.Error("an unparseable document was misclassified as a systemic fault; it would " +
+			"never give up")
+	}
+	if !errors.Is(err, enrich.ErrInvalidOutput) {
+		t.Errorf("got %v, want ErrInvalidOutput", err)
+	}
+}

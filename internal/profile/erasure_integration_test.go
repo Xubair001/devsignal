@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Xubair001/devsignal/internal/auth"
+	"github.com/Xubair001/devsignal/internal/dbtest"
 	"github.com/Xubair001/devsignal/internal/store"
 	"github.com/Xubair001/devsignal/pkg/blob"
 )
@@ -23,16 +24,7 @@ func quiet() *slog.Logger {
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set")
-	}
-	p, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(p.Close)
-	return p
+	return dbtest.Pool(t)
 }
 
 func testService(t *testing.T, pool *pgxpool.Pool) *Service {

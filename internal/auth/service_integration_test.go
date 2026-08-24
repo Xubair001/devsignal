@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Xubair001/devsignal/internal/dbtest"
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
@@ -20,16 +21,7 @@ import (
 // constraint, an index or a concurrency interaction that a mock cannot show.
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
+	return dbtest.Pool(t)
 }
 
 func newSvc(t *testing.T, pool *pgxpool.Pool) *Service {

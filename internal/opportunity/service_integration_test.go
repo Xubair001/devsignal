@@ -5,13 +5,14 @@ package opportunity
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Xubair001/devsignal/internal/dbtest"
 )
 
 type fixedClock struct{ t time.Time }
@@ -22,16 +23,7 @@ var refNow = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set")
-	}
-	p, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(p.Close)
-	return p
+	return dbtest.Pool(t)
 }
 
 type seedOpts struct {

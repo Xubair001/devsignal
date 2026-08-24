@@ -94,3 +94,13 @@ SELECT id, pipeline_state, version, attempts, last_error, lease_until, next_atte
 
 -- name: DeleteOpportunitiesForCompany :execrows
 DELETE FROM opportunity WHERE company_id = $1;
+
+-- name: DeferItem :exec
+-- Put an item back WITHOUT spending an attempt. ClaimBatch already incremented
+-- attempts on the way in, so it is decremented here: a systemic failure must not
+-- consume a budget that exists for individually-bad records.
+UPDATE opportunity
+   SET next_attempt_at = now() + sqlc.arg(delay)::interval,
+       lease_until = NULL,
+       attempts = GREATEST(attempts - 1, 0)
+ WHERE id = sqlc.arg(id);

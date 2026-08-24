@@ -4,6 +4,12 @@ SHELL := /bin/bash
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
 DB_URL ?= postgres://devsignal:devsignal@localhost:65432/devsignal?sslmode=disable
+# The integration suite is destructive: the queue tests claim and advance rows
+# table-wide, because that is what a real worker does. They therefore run against
+# a database provisioned and dropped per run, never the development one.
+TEST_DB_NAME ?= devsignal_test
+DB_ADMIN_URL  = $(subst /devsignal?,/postgres?,$(DB_URL))
+DB_TEST_URL   = $(subst /devsignal?,/$(TEST_DB_NAME)?,$(DB_URL))
 S3_ENDPOINT ?= http://localhost:65000
 S3_ACCESS_KEY ?= devsignal
 S3_SECRET_KEY ?= devsignal123
@@ -117,9 +123,16 @@ test-golden: ## source parser fixture tests — refuse to auto-rebaseline
 golden-update: ## rewrite golden files (deliberate act; review the diff)
 	go test -count=1 ./internal/source/... -update
 
+.PHONY: test-db
+test-db: ## (re)create the disposable integration database
+	@psql "$(DB_ADMIN_URL)" -q \
+	  -c "DROP DATABASE IF EXISTS $(TEST_DB_NAME) WITH (FORCE);" \
+	  -c "CREATE DATABASE $(TEST_DB_NAME);"
+	@migrate -path migrations -database "$(DB_TEST_URL)" up
+
 .PHONY: test-integration
-test-integration: ## integration tests against the real stack (needs make up)
-	DATABASE_URL="$(DB_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
+test-integration: test-db ## integration tests against a disposable database (needs make up)
+	DATABASE_URL="$(DB_TEST_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
 	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
 	go test -tags integration -count=1 -timeout 300s ./...
 
@@ -128,8 +141,8 @@ eval: ## [step 16] ranking evaluation harness — gates scoring changes
 	@echo "not built yet — arrives with the eval harness (blueprint §35 step 16)"; exit 1
 
 .PHONY: check-erasure
-check-erasure: ## proves an erased user leaves no trace in any store
-	DATABASE_URL="$(DB_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
+check-erasure: test-db ## proves an erased user leaves no trace in any store
+	DATABASE_URL="$(DB_TEST_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
 	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
 	go test -tags integration -count=1 -v -run 'TestErasure|TestExtractedTextIsNot' \
 	  ./internal/profile/ ./pkg/blob/

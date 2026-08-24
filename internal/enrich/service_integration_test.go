@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Xubair001/devsignal/internal/dbtest"
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
@@ -52,16 +53,7 @@ func quiet() *slog.Logger {
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set")
-	}
-	p, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("pool: %v", err)
-	}
-	t.Cleanup(p.Close)
-	return p
+	return dbtest.Pool(t)
 }
 
 func newHash(t *testing.T) []byte {
@@ -74,20 +66,9 @@ func newHash(t *testing.T) []byte {
 	return h
 }
 
-var poolOnce sync.Once
-var sharedPool *pgxpool.Pool
-
 func testPoolFor(t *testing.T) *pgxpool.Pool {
-	poolOnce.Do(func() {
-		p, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
-		if err == nil {
-			sharedPool = p
-		}
-	})
-	if sharedPool == nil {
-		t.Fatal("no pool")
-	}
-	return sharedPool
+	t.Helper()
+	return dbtest.Pool(t)
 }
 
 const longText = "We are hiring a Senior Backend Engineer to build and operate Go " +

@@ -61,6 +61,13 @@ func (e *Enricher) Handle(ctx context.Context, it pipeline.Item) error {
 
 	out, err := e.svc.Extract(ctx, row.ContentHash, text, e.Lane)
 	if err != nil {
+		// A systemic fault fails identically for every posting, so it must not
+		// consume this one's retry budget — and it must stay loud, because a
+		// missing credential silently degrading the whole corpus is worse than a
+		// slow one.
+		if errors.Is(err, enrich.ErrProviderUnavailable) {
+			return fmt.Errorf("%w: %w", pipeline.ErrRetryLater, err)
+		}
 		if errors.Is(err, enrich.ErrInvalidOutput) || errors.Is(err, enrich.ErrEmptyInput) {
 			// The model answered, but not usably. Record it against this posting
 			// so one bad document does not look like a broken model, then let the

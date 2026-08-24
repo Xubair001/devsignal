@@ -17,7 +17,58 @@ var (
 	ErrInvalidOutput = errors.New("enrich: model output failed validation")
 	// ErrEmptyInput guards against paying for a call with nothing to read.
 	ErrEmptyInput = errors.New("enrich: nothing to extract from")
+	// ErrProviderUnavailable is a SYSTEMIC fault: missing credentials, an
+	// authentication failure, a rate limit, or the provider being down. It fails
+	// identically for every posting, so it must not consume any single posting's
+	// retry budget.
+	ErrProviderUnavailable = errors.New("enrich: provider unavailable")
 )
+
+// systemicMarkers identify faults that are about the provider or our
+// configuration rather than about this document. Matched on text because the SDK
+// surfaces credential resolution failures before any typed API error exists.
+var systemicMarkers = []string{
+	"no anthropic credentials",
+	"authentication",
+	"unauthorized",
+	"invalid x-api-key",
+	"permission",
+	"rate limit",
+	"overloaded",
+	"too many requests",
+	"connection refused",
+	"no such host",
+	"context deadline exceeded",
+}
+
+// ClassifyProviderError separates "the world is broken" from "this document is
+// broken". Getting it wrong either burns the retry budget on a misconfiguration
+// or gives up on a posting because of a transient blip.
+//
+// Applied by the Service rather than by each provider, so the policy is the same
+// whatever is behind the interface — an earlier version classified inside the
+// Claude provider only, which meant every other implementation silently bypassed
+// it.
+func ClassifyProviderError(err error) error {
+	if err == nil {
+		return nil
+	}
+	low := strings.ToLower(err.Error())
+	for _, m := range systemicMarkers {
+		if strings.Contains(low, m) {
+			return fmt.Errorf("%w: %w", ErrProviderUnavailable, err)
+		}
+	}
+	var apiErr *anthropic.Error
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.StatusCode == 401, apiErr.StatusCode == 403,
+			apiErr.StatusCode == 429, apiErr.StatusCode >= 500:
+			return fmt.Errorf("%w: %w", ErrProviderUnavailable, err)
+		}
+	}
+	return err
+}
 
 // Usage is what a call cost.
 type Usage struct {
