@@ -266,4 +266,10 @@ Before calling anything done, walk blueprint §38's production readiness gate. I
 
 ## Branches
 
-`main` ← PRs from `dev` ← feature branches. Never push to `main` directly.
+Work on `dev`. Feature branches, when needed, come off `dev`.
+
+`main` is updated by the repo owner via merge or PR — do not push to it, and do
+not merge into it. An automated agent's job ends at pushing `dev`.
+
+CI runs on both branches, so work on `dev` is verified before it is ever
+proposed for `main`.
