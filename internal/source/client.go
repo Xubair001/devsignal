@@ -13,10 +13,28 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// MaxBodyBytes caps every read from a host we do not control. An unbounded
-// io.ReadAll on a hostile or merely broken response is the most reliable way to
-// OOM this service.
-const MaxBodyBytes = 8 << 20 // 8 MiB
+// MaxBodyBytes is the default cap on every read from a host we do not control.
+// An unbounded io.ReadAll on a hostile or merely broken response is the most
+// reliable way to OOM this service.
+//
+// A bulk board API returns the whole board in one document, so the cap has to fit
+// the largest legitimate board rather than a typical one. Measured against live
+// endpoints: Greenhouse's gitlab board is 143 KB, Ashby's linear board 1.2 MB,
+// Ashby's ramp board 2.3 MB — and Ashby's openai board is 12.4 MB, which the
+// original 8 MiB cap rejected outright. A cap that silently excludes the largest
+// employers is worse than a generous one, because the failure looks like a small
+// market rather than a configuration error.
+const MaxBodyBytes = 32 << 20 // 32 MiB
+
+// MaxBodyBytesFor returns the cap for one client, falling back to the default.
+// Per-client rather than global so a source family measured to need more does
+// not raise the ceiling for every other host we talk to.
+func (c *Client) MaxBodyBytesFor() int64 {
+	if c.maxBody > 0 {
+		return c.maxBody
+	}
+	return MaxBodyBytes
+}
 
 // ErrBodyTooLarge means the response exceeded the cap. The source should be
 // quarantined rather than retried blindly — retrying will just OOM later.
@@ -30,6 +48,8 @@ type Client struct {
 	http      *http.Client
 	userAgent string
 
+	maxBody int64
+
 	mu      sync.Mutex
 	limiter map[string]*rate.Limiter // per HOST: politeness is per host, not global
 	rps     float64
@@ -42,6 +62,9 @@ type ClientConfig struct {
 	RequestsPerSecond float64
 	Burst             int
 	TotalTimeout      time.Duration
+	// MaxBodyBytes overrides the default cap for this client. Zero uses the
+	// default; set it only with a measurement to point at.
+	MaxBodyBytes int64
 }
 
 func DefaultClientConfig() ClientConfig {
@@ -77,6 +100,7 @@ func NewClient(cfg ClientConfig) *Client {
 		limiter:   map[string]*rate.Limiter{},
 		rps:       cfg.RequestsPerSecond,
 		burst:     cfg.Burst,
+		maxBody:   cfg.MaxBodyBytes,
 	}
 }
 
@@ -147,11 +171,12 @@ func (c *Client) GetConditional(ctx context.Context, rawURL string, cur Cursor) 
 		return out, fmt.Errorf("source: unexpected status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes+1))
+	limit := c.MaxBodyBytesFor()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return out, fmt.Errorf("source: read body: %w", err)
 	}
-	if len(body) > MaxBodyBytes {
+	if int64(len(body)) > limit {
 		return out, ErrBodyTooLarge
 	}
 	out.Body = body

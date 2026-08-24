@@ -206,10 +206,10 @@ func TestParseRejectsGarbage(t *testing.T) {
 
 func TestWorkModeOnlyWhenStated(t *testing.T) {
 	cases := map[string]string{
-		"Remote, Italy":              workRemote,
-		"Remote, Canada; Remote, US": workRemote,
-		"San Francisco (Remote OK)":  workRemote,
-		"Hybrid - Berlin":            workHybrid,
+		"Remote, Italy":              source.WorkRemote,
+		"Remote, Canada; Remote, US": source.WorkRemote,
+		"San Francisco (Remote OK)":  source.WorkRemote,
+		"Hybrid - Berlin":            source.WorkHybrid,
 		"Bangalore, India":           "",
 		"":                           "",
 	}

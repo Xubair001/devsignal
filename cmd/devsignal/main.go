@@ -36,7 +36,11 @@ import (
 	"github.com/Xubair001/devsignal/internal/source"
 
 	// Importing an adapter family is what enables it.
+	// Imported for their registry side effect: enabling a source family is one
+	// import, never a change to the platform.
+	_ "github.com/Xubair001/devsignal/internal/source/ashby"
 	_ "github.com/Xubair001/devsignal/internal/source/greenhouse"
+	_ "github.com/Xubair001/devsignal/internal/source/lever"
 	"github.com/Xubair001/devsignal/internal/stages"
 	"github.com/Xubair001/devsignal/internal/store"
 	"github.com/Xubair001/devsignal/pkg/blob"

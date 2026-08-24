@@ -24,6 +24,18 @@ const (
 	TierB Tier = "b"
 )
 
+// The work-mode vocabulary every adapter emits. Shared here rather than repeated
+// per adapter because it is a contract with normalization: a family that invents
+// a fourth value silently produces postings no predicate can match.
+//
+// Empty is a real and common answer. Most boards do not state a work mode, and an
+// adapter must leave it empty rather than guess (hard rule 3).
+const (
+	WorkRemote = "remote"
+	WorkHybrid = "hybrid"
+	WorkOnsite = "onsite"
+)
+
 // RawDocument is exactly what the source returned, before interpretation.
 // Persisting it is what makes re-parsing history possible without re-fetching.
 type RawDocument struct {

@@ -37,17 +37,21 @@ Company entity resolution is deterministic-only so far: the ATS board token and 
 Alias and fuzzy matching are still to come, and are never auto-merged. Do not skip ahead because a
 later step looks easier — the order is dependency-ordered, not thematic.
 
-Only `greenhouse:gitlab` is registered, as a proof of slice. Adding the rest is gated on the
-Tier-A source list below.
+Three source families are built and verified against live endpoints: `greenhouse`, `lever`,
+`ashby`. All three are bulk JSON with descriptions inline, which is what makes a frequent poll
+affordable. [docs/TIER-A-SOURCES.md](docs/TIER-A-SOURCES.md) is the registry, including four
+platforms reviewed and reachable but needing a different fetch strategy (SmartRecruiters' list
+carries no description at all), and why the Tier-C exclusions are permanent rather than deferred.
 
-Four decisions are still open and are tracked in blueprint §33.3. Do not code around them:
+[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) carries the blueprint §33.3 items with a
+recommendation and reasoning for each:
 
-| Open item | Blocks |
-|-----------|--------|
-| EU AI Act classification opinion for the recommender | EU launch, not development |
-| Final Tier-A source list with per-source review | Adapter build (not the schema) |
-| Backup erasure approach: crypto-shredding vs stated window | Privacy notice wording |
-| Email consent basis and sending domain setup | First digest send |
+| Open item | Status | Blocks |
+|-----------|--------|--------|
+| Final Tier-A source list with per-source review | **settled** — three platforms built, rest reviewed | nothing |
+| Backup erasure approach | **recommended** — stated 35-day window over crypto-shredding | privacy notice wording |
+| Email consent basis and sending domain | **recommended** — SES + double opt-in, Resend in dev | first digest send (step 18) |
+| EU AI Act classification for the recommender | **needs counsel** — not an engineering decision | EU launch, not development |
 
 ## Project (WHAT / WHY)
 
@@ -240,7 +244,14 @@ SELECT pipeline_state, count(*), min(updated_at)
 
 Tier A is load-bearing, not merely safe: `(ats_type, ats_job_id)` is a stable global identifier, so
 dedup is nearly free; the parsing surface collapses to JSON; and conditional GETs are cheap enough to
-make the 5-minute freshness SLO real.
+make the 5-minute freshness SLO real. Verified: a second Ashby poll returns 304 against a stored ETag.
+
+Built: `greenhouse`, `lever`, `ashby` — see [docs/TIER-A-SOURCES.md](docs/TIER-A-SOURCES.md) for the
+platform reviews, the per-platform quirks that cost something to learn, and what is deliberately out.
+Two things worth knowing before adding a family: a bulk board is one document, so the body cap has to
+fit the largest legitimate board (Ashby's `openai` board is 12.4 MB, which the original 8 MiB cap
+rejected outright), and neither Lever nor Ashby returns a company name — leave the field empty and let
+resolution fall back to the board token rather than deriving a name from a slug.
 
 ## Prerequisites
 

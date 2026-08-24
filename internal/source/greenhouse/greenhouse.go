@@ -19,13 +19,6 @@ import (
 	"github.com/Xubair001/devsignal/internal/source"
 )
 
-// Work modes we are willing to assert from a location string. Anything not
-// unambiguously stated stays empty — normalization owns geography.
-const (
-	workRemote = "remote"
-	workHybrid = "hybrid"
-)
-
 const (
 	atsType  = "greenhouse"
 	endpoint = "https://boards-api.greenhouse.io/v1/boards/%s/jobs?content=true"
@@ -155,10 +148,10 @@ func (a *Adapter) Parse(doc source.RawDocument) ([]source.ParsedPosting, error) 
 func workModeFrom(loc string) string {
 	l := strings.ToLower(loc)
 	switch {
-	case strings.Contains(l, workRemote):
-		return workRemote
-	case strings.Contains(l, workHybrid):
-		return workHybrid
+	case strings.Contains(l, source.WorkRemote):
+		return source.WorkRemote
+	case strings.Contains(l, source.WorkHybrid):
+		return source.WorkHybrid
 	default:
 		return ""
 	}
