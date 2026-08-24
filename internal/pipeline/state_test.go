@@ -38,13 +38,38 @@ func TestTerminalStatesHaveNoSuccessor(t *testing.T) {
 func TestOnlyEnrichmentStagesDegrade(t *testing.T) {
 	// A posting with no extracted skills is still better than an invisible one;
 	// a posting with no identity is not.
-	degradable := map[State]bool{StateEnriched: true, StateEmbedded: true}
+	//
+	// The state names the work STILL TO DO, because a worker claims an item in
+	// state X and runs the handler that advances it out of X. Enrichment runs on
+	// 'deduped' and embedding runs on 'enriched', so those are the degradable
+	// pair. Getting this off by one parks a failing enrichment in
+	// failed_permanent instead of publishing it degraded.
+	degradable := map[State]bool{StateDeduped: true, StateEnriched: true}
 	for _, s := range []State{
 		StateDiscovered, StateFetched, StateParsed, StateNormalized,
 		StateDeduped, StateEnriched, StateEmbedded,
 	} {
 		if got := s.Degradable(); got != degradable[s] {
 			t.Errorf("%q degradable = %v, want %v", s, got, degradable[s])
+		}
+	}
+}
+
+// Every state whose handler calls an external model must be degradable, or an
+// outage at that provider silently stops postings becoming visible.
+func TestStatesWithExternalDependenciesAreDegradable(t *testing.T) {
+	// enrichment runs on deduped; embeddings run on enriched.
+	for _, s := range []State{StateDeduped, StateEnriched} {
+		if !s.Degradable() {
+			t.Errorf("%q runs an external-model handler but is not degradable: a provider "+
+				"outage would block visibility", s)
+		}
+	}
+	// Identity and correctness stages must NOT degrade: publishing a posting with
+	// no company or no dedup decision is worse than not publishing it.
+	for _, s := range []State{StateDiscovered, StateFetched, StateParsed, StateNormalized} {
+		if s.Degradable() {
+			t.Errorf("%q establishes identity or correctness and must not degrade", s)
 		}
 	}
 }

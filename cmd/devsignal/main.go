@@ -25,6 +25,7 @@ import (
 
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
+	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/ingest"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
@@ -42,7 +43,7 @@ import (
 
 func main() {
 	role := flag.String("role", "api",
-		"api | worker | ingest-once | add-source | add-sources | source-health | digest | admin")
+		"api | worker | ingest-once | add-source | add-sources | source-health | spend | digest | admin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -98,7 +99,7 @@ func run(role, srcName, srcFile, reviewer string) error {
 	case "api":
 		return serveAPI(ctx, cfg, log, pool)
 	case "worker":
-		return runWorkers(ctx, log, pool)
+		return runWorkers(ctx, cfg, log, pool)
 	case "add-source":
 		return addSource(ctx, log, pool, srcName)
 	case "ingest-once":
@@ -107,6 +108,8 @@ func run(role, srcName, srcFile, reviewer string) error {
 		return addSources(ctx, log, pool, srcFile, reviewer)
 	case "source-health":
 		return sourceHealthReport(ctx, pool)
+	case "spend":
+		return spendReport(ctx, pool)
 	case "digest", "admin":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
@@ -263,9 +266,11 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 // Handlers are placeholders until their step: each stage currently just passes
 // the record through so the spine is exercisable end to end. Replacing a
 // placeholder is the whole of that step's work.
-func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error {
-	cfg := pipeline.DefaultConfig()
-	queue := pipeline.NewQueue(pool, cfg, log)
+func runWorkers(ctx context.Context, appCfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
+	// pipeCfg, not cfg: the app config is also in scope here and confusing the
+	// two is how the wrong value gets read.
+	pipeCfg := pipeline.DefaultConfig()
+	queue := pipeline.NewQueue(pool, pipeCfg, log)
 
 	// Pass-through where the real work arrives at a later step. Replacing one of
 	// these IS that step's work; they are deliberately visible rather than hidden
@@ -274,6 +279,17 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 
 	normalizer := stages.NewNormalizer(pool, log)
 	deduper := stages.NewDeduper(pool, log)
+
+	// The model is a configuration value, not an architectural commitment: the
+	// provider is an interface so tiers can be compared against the regression
+	// set without touching the pipeline.
+	provider, perr := enrich.NewClaudeProvider(enrich.ClaudeConfig{
+		APIKey: appCfg.AnthropicAPIKey, Model: appCfg.ExtractionModel,
+	})
+	if perr != nil {
+		return fmt.Errorf("extraction provider: %w", perr)
+	}
+	enricher := stages.NewEnricher(pool, enrich.NewService(pool, provider, log), log)
 
 	// Concurrency per stage is set independently — that is the whole point of
 	// separating them (blueprint §25). AI work will be the bottleneck, not fetch.
@@ -286,7 +302,10 @@ func runWorkers(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) error
 		{State: pipeline.StateParsed, Concurrency: 8, Handle: normalizer.Handle},
 		{State: pipeline.StateNormalized, Concurrency: 4, Handle: deduper.Handle},
 
-		{State: pipeline.StateDeduped, Concurrency: 4, Handle: passthrough},  // enrichment: step 12
+		// Lower concurrency than the cheap stages: this is the only per-token
+		// component, and it is the bottleneck the blueprint expects to scale
+		// independently (§25).
+		{State: pipeline.StateDeduped, Concurrency: 2, Handle: enricher.Handle},
 		{State: pipeline.StateEnriched, Concurrency: 2, Handle: passthrough}, // embeddings: step 13
 		{State: pipeline.StateEmbedded, Concurrency: 2, Handle: passthrough},
 	}
@@ -519,4 +538,32 @@ func trunc(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+// spendReport prints what enrichment has cost. Enrichment is the only component
+// billed per token, so its spend has to be observable rather than inferred from
+// an invoice weeks later.
+func spendReport(ctx context.Context, pool *pgxpool.Pool) error {
+	rows, err := store.New(pool).ExtractionSpendReport(ctx)
+	if err != nil {
+		return fmt.Errorf("spend report: %w", err)
+	}
+	if len(rows) == 0 {
+		fmt.Println("no extractions recorded yet")
+		return nil
+	}
+	fmt.Printf("%-12s %-24s %-6s %7s %12s %12s %12s  %s\n",
+		"DAY", "MODEL", "LANE", "CALLS", "INPUT", "OUTPUT", "CACHED", "CACHE HIT")
+	for _, r := range rows {
+		// The cached share of input tokens is the lever that decides the bill, so
+		// it is shown rather than left to be worked out.
+		share := "-"
+		if r.InputTokens > 0 {
+			share = fmt.Sprintf("%.0f%%", 100*float64(r.CacheReadTokens)/float64(r.InputTokens))
+		}
+		fmt.Printf("%-12s %-24s %-6s %7d %12d %12d %12d  %s\n",
+			r.Day.Time.Format("2006-01-02"), trunc(r.ModelID, 24), r.Lane,
+			r.Calls, r.InputTokens, r.OutputTokens, r.CacheReadTokens, share)
+	}
+	return nil
 }

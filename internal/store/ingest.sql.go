@@ -265,7 +265,7 @@ INSERT INTO opportunity (
     -- Seeing a posting for the first time IS a verification. Leaving this NULL
     -- made "verified open, checked N ago" unanswerable for every new posting.
     now(),'parsed')
-RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at, repost_count, source_posted_at_at_last_change
+RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at, repost_count, source_posted_at_at_last_change, extraction_content_hash, enriched_at, extraction_error
 `
 
 type InsertOpportunityFromPostingParams struct {
@@ -355,6 +355,9 @@ func (q *Queries) InsertOpportunityFromPosting(ctx context.Context, arg InsertOp
 		&i.SweptAt,
 		&i.RepostCount,
 		&i.SourcePostedAtAtLastChange,
+		&i.ExtractionContentHash,
+		&i.EnrichedAt,
+		&i.ExtractionError,
 	)
 	return i, err
 }

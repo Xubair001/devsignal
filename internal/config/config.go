@@ -33,6 +33,11 @@ type Config struct {
 	HTTPWriteTimeout time.Duration
 	ShutdownTimeout  time.Duration
 
+	// Extraction. The model is a config value so tiers can be compared without a
+	// code change; an empty key lets the SDK resolve credentials itself.
+	AnthropicAPIKey string
+	ExtractionModel string
+
 	OTelEnabled     bool
 	OTelExporter    string
 	OTelServiceName string
@@ -59,6 +64,8 @@ func Load() (*Config, error) {
 		HTTPReadTimeout:  dur("HTTP_READ_TIMEOUT", 15*time.Second),
 		HTTPWriteTimeout: dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 		ShutdownTimeout:  dur("SHUTDOWN_TIMEOUT", 30*time.Second),
+		AnthropicAPIKey:  str("ANTHROPIC_API_KEY", ""),
+		ExtractionModel:  str("EXTRACTION_MODEL", "claude-opus-5"),
 		OTelEnabled:      boolean("OTEL_ENABLED", true),
 		OTelExporter:     str("OTEL_EXPORTER", "stdout"),
 		OTelServiceName:  str("OTEL_SERVICE_NAME", "devsignal"),

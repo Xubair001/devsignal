@@ -83,6 +83,20 @@ type ErasureStep struct {
 	CompletedAt pgtype.Timestamptz
 }
 
+type Extraction struct {
+	ContentHash     []byte
+	PromptVersion   string
+	ModelID         string
+	SchemaVersion   string
+	RawOutput       []byte
+	Normalized      []byte
+	InputTokens     int32
+	OutputTokens    int32
+	CacheReadTokens int32
+	Lane            string
+	CreatedAt       pgtype.Timestamptz
+}
+
 type MergeCandidate struct {
 	ID                 pgtype.UUID
 	LeftOpportunityID  pgtype.UUID
@@ -155,6 +169,9 @@ type Opportunity struct {
 	SweptAt                    pgtype.Timestamptz
 	RepostCount                int32
 	SourcePostedAtAtLastChange pgtype.Timestamptz
+	ExtractionContentHash      []byte
+	EnrichedAt                 pgtype.Timestamptz
+	ExtractionError            *string
 }
 
 type OpportunityEmbedding struct {

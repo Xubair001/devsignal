@@ -7,16 +7,22 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–11 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–12 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
-profile with resume ingestion and verified erasure. It ingests real
+profile with resume ingestion and verified erasure, and cached LLM extraction. It ingests real
 postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
 
-Next: step 12 (extraction with a content-hash cache). Scaling past the two boards currently
+Next: step 13 (embeddings with version columns), then step 14 (retrieval).
+
+Extraction runs against a `Provider` interface, so the model is a config value
+(`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
+environment, so extraction has only ever run against a fake provider — the cache,
+validation and degrade paths are proven, but no live model call has been made.
+`--role=spend` reports what it costs once one is. Scaling past the two boards currently
 registered is blocked on the Tier-A source list, not on code — `add-sources` takes a file.
 
 Erasure is real and `make check-erasure` proves it. The one part still open is BACKUPS: either
@@ -71,6 +77,7 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/digest/` | Notification budget, quiet hours, the empty case |
 | `internal/auth/`, `internal/profile/` | Identity, sessions, tenancy, resume ingestion |
 | `internal/admin/` | Source health, merge/unmerge, quarantine, flag queue |
+| `internal/enrich/` | Extraction. The cache key is the determinism guarantee, not just a cost saving |
 | `internal/ghostrisk/` | Observable ghost-listing signals. Pure; bands + reasons, never a bare score |
 | `internal/sourcehealth/` | Parser-rot detection. Pure; relative drops against a source's own baseline |
 | `internal/profile/` | Profile, resume ingestion, and the erasure inventory. Add a location when you add a store |

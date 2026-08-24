@@ -48,15 +48,25 @@ func (s State) Terminal() bool {
 	return s == StateReady || s == StateFailedPermanent
 }
 
-// Degradable reports whether a failure at this stage may still be published with
-// a quality flag rather than blocking the record.
+// Degradable reports whether a failure of the work done IN this state may still
+// be published with a quality flag rather than blocking the record.
 //
-// This is the rule most often got wrong. A strictly sequential chain makes the
-// least reliable dependency — an external model — a hard prerequisite for a
-// posting ever becoming visible. Enrichment and embedding degrade; the stages
-// that establish identity and correctness do not.
+// Note carefully which state this is about. A worker claims an item IN state X
+// and runs the handler that advances it OUT of X, so the state names the work
+// still to be done:
+//
+//	deduped  -> the enrichment handler runs   (optional: external model)
+//	enriched -> the embedding handler runs    (optional: external model)
+//
+// So these two are the degradable ones. An earlier version listed enriched and
+// embedded, which is off by one: a permanently failing enrichment would park in
+// failed_permanent and never reach 'ready'. That is exactly the failure this rule
+// exists to prevent — a strictly sequential chain making the least reliable
+// dependency a hard prerequisite for a posting ever becoming visible.
+//
+// The stages that establish identity and correctness never degrade.
 func (s State) Degradable() bool {
-	return s == StateEnriched || s == StateEmbedded
+	return s == StateDeduped || s == StateEnriched
 }
 
 // AllNonTerminal is used by the stats/sweeper views.
