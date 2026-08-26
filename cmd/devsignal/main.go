@@ -40,6 +40,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/profile"
 	"github.com/Xubair001/devsignal/internal/profileindex"
 	"github.com/Xubair001/devsignal/internal/retrieve"
+	"github.com/Xubair001/devsignal/internal/slo"
 	"github.com/Xubair001/devsignal/internal/source"
 
 	// Importing an adapter family is what enables it.
@@ -59,7 +60,7 @@ func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
 			"spend | retrieve | match | eval | reindex-profiles | "+
-			"grant-admin | revoke-admin | list-admins | digest")
+			"grant-admin | revoke-admin | list-admins | slo | digest")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -159,6 +160,8 @@ func run(role string, f flags) error {
 		return grantAdmin(ctx, log, pool, f.email, false)
 	case "list-admins":
 		return listAdmins(ctx, pool)
+	case "slo":
+		return sloReport(ctx, pool)
 	case "digest":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
@@ -199,6 +202,10 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 	// X-Real-IP whether or not your infrastructure sets them). When rate
 	// limiting needs a client IP, derive it from a trusted-proxy config.
 	r.Use(middleware.RequestID, middleware.Recoverer)
+	// After the router so the chi route pattern is populated: recording the raw
+	// path would create one metric series per opportunity id, which is hard rule
+	// 12's exact failure mode.
+	r.Use(telemetry.MetricsMiddleware)
 
 	// Liveness: is the process up. Never touches a dependency — a DB blip must
 	// not get the pod killed.
@@ -245,6 +252,7 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
 	feedH := engagement.NewHandler(matcher, engagementSvc, log)
 	adminH := admin.NewHandler(admin.New(pool, log), log)
+	sloH := admin.NewSLOHandler(pool, log)
 
 	// The operations surface. Authenticated like everything else, then gated by one
 	// authorization middleware — not a check per handler, because the handler that
@@ -253,6 +261,10 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		adm.Use(authH.Authenticator)
 		adm.Use(adminH.RequireAdmin)
 		adm.Mount("/", adminH.Routes())
+		// The objective report, on the operations surface rather than a public one:
+		// a breached SLO is operational detail, and publishing it invites it being
+		// read as a promise to users.
+		adm.Get("/slo", sloH.Report)
 	})
 
 	r.Route("/api/v1", func(api chi.Router) {
@@ -981,4 +993,91 @@ func domainOf(email string) string {
 		return email[i+1:]
 	}
 	return "unknown"
+}
+
+// sloReport prints every objective against its target.
+//
+// The interesting rows are the ones that are NOT met and the ones that cannot be
+// measured. A report where every line says "met" usually means the measurements
+// are missing rather than that everything is healthy, which is why unmeasurable
+// objectives are printed rather than filtered out.
+//
+// Exits non-zero when an objective is breached, so a cron or an alerting system
+// can consume it without parsing the output.
+func sloReport(ctx context.Context, pool *pgxpool.Pool) error {
+	ev := slo.NewEvaluator(pool)
+
+	rep, err := ev.Evaluate(ctx)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("service level objectives, measured %s\n\n",
+		rep.MeasuredAt.Format(time.RFC3339))
+
+	mark := map[slo.Status]string{
+		slo.StatusMet:          "  ok  ",
+		slo.StatusAtRisk:       " risk ",
+		slo.StatusBreached:     " MISS ",
+		slo.StatusNoData:       "  --  ",
+		slo.StatusUnmeasurable: "  ??  ",
+	}
+	for _, r := range rep.Results {
+		fmt.Printf("[%s] %-46s %s\n", mark[r.Status],
+			truncate(r.Objective.Description, 46), r.Detail)
+		if r.BurnRate != nil && *r.BurnRate > 1 {
+			sev := slo.Alert(*r.BurnRate, r.Objective.Window)
+			fmt.Printf("         burn %.1fx of the error budget", *r.BurnRate)
+			if sev != slo.SeverityNone {
+				fmt.Printf(" -> %s", sev)
+			}
+			fmt.Println()
+		}
+	}
+
+	// Verification recency, reported next to the SLOs but never as one of them.
+	// "How recently we checked" and "is this role genuinely open" are different
+	// claims, and only the first is something we can know.
+	if lf, err := ev.LivenessFreshness(ctx); err == nil && lf.Shown > 0 {
+		fmt.Printf("\nliveness VERIFICATION RECENCY (not the accuracy objective):\n")
+		fmt.Printf("  %d of %d visible postings checked within %s (%.1f%%), oldest check %s\n",
+			lf.CheckedRecently, lf.Shown, lf.Threshold, lf.Fraction()*100,
+			lf.OldestCheck.Round(time.Minute))
+	}
+
+	// The state distribution IS the pipeline dashboard (CLAUDE.md). A large count
+	// that is moving is healthy; a small one that is not is an incident, so the
+	// oldest entry travels with the count.
+	states, err := ev.PipelineStates(ctx)
+	if err != nil {
+		return err
+	}
+	if len(states) > 0 {
+		fmt.Printf("\npipeline state distribution:\n")
+		for _, s := range states {
+			age := time.Since(s.Oldest).Round(time.Second)
+			note := ""
+			if s.State != "ready" && s.State != "failed_permanent" && age > time.Hour {
+				note = "  <- stranded"
+			}
+			fmt.Printf("  %-18s %6d  oldest %s%s\n", s.State, s.Records, age, note)
+		}
+	}
+
+	breached, atRisk := rep.Breached(), rep.AtRisk()
+	unmeasurable := rep.Unmeasurable()
+	fmt.Printf("\n%d breached, %d at risk, %d not measurable\n",
+		len(breached), len(atRisk), len(unmeasurable))
+
+	if len(unmeasurable) > 0 {
+		fmt.Println("\nnot measurable yet, and why:")
+		for _, r := range unmeasurable {
+			fmt.Printf("  %-42s %s\n", truncate(r.Objective.Description, 42), r.Detail)
+		}
+	}
+
+	if len(breached) > 0 {
+		return fmt.Errorf("%d objective(s) breached", len(breached))
+	}
+	return nil
 }

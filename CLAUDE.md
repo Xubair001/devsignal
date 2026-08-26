@@ -7,14 +7,15 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–17 and 19 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–17, 19 and 20 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
 embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
 score and its explanation, the evaluation harness that gates every scoring change, and the
 feed with saves, applications and dismiss-with-reason, and the admin console with quarantine,
-merge tools and the purge drill. It ingests real postings from multiple boards:
+merge tools and the purge drill, and the SLOs with error budgets and burn-rate alerts. It
+ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -41,9 +42,15 @@ granted only from the binary (`--role=grant-admin --email=…`) so a compromised
 mint more admins. Every action lands in the hash-chained audit log in the same transaction as
 the change.
 
+`--role=slo` prints every objective against its target and exits non-zero on a breach, so a
+cron entry is a working alert with no metrics pipeline. `GET /internal/admin/slo` serves the
+same as JSON. Five of the twelve objectives report **unmeasurable with the reason attached**
+rather than green — see [docs/SLO.md](docs/SLO.md) for the alert rules and why that matters.
+
 Next: step 18 is the daily digest, which needs the email decisions in
-[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 20 (SLOs) is unblocked, and
-so is the frontend — see [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
+[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 21 (load test) needs a
+metrics backend to read percentiles from. The frontend is unblocked — see
+[docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -244,6 +251,15 @@ blueprint's audit found.
     one source — cleanup with unbounded blast radius. Destructive admin actions also count first
     and require the operator to echo the number back.
 
+26. **An objective, metric or score we cannot measure reports as unmeasurable with the reason
+    attached — never as green.** Five of the twelve SLOs cannot be measured yet: liveness
+    accuracy needs the employer's answer, dedup precision needs labelled pairs, the digest does
+    not exist. A dashboard showing green for something nobody measured is worse than one with a
+    visible gap, because the gap prompts a question and the false green ends the conversation.
+    `TestLivenessAccuracyStaysUnmeasurableUntilGroundTruthExists` fails if anyone flips the
+    product's central claim to measurable, since that means finding ground truth or starting to
+    guess. This is hard rule 3 applied to ourselves.
+
 ## The two numbers
 
 The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
@@ -348,6 +364,7 @@ make test-golden           # source parser fixtures — the ones that catch real
 make eval                  # NDCG@10 / Precision@7 / coverage. Gates scoring changes
 make test-integration      # provisions a disposable database, then runs the suite
 make check-erasure         # asserts a deleted identifier appears nowhere
+./bin/devsignal --role=slo  # every objective against its target; exits non-zero on a breach
 ```
 
 The integration suite is destructive — the queue tests claim and advance rows table-wide,
