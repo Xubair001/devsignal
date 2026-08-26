@@ -97,9 +97,23 @@ const findBlockCandidates = `-- name: FindBlockCandidates :many
 SELECT o.id, o.company_id, o.ats_type, o.title_normalized, o.content_hash,
        o.simhash, o.location_country, o.remote_geo_scope,
        coalesce(length(o.description_text), 0)::int AS text_len,
-       s.apply_url, s.ats_job_id
+       -- Deterministic scalar subqueries, NOT a join.
+       --
+       -- opportunity_source is one-to-MANY and hard rule 11 keeps every row on a
+       -- merge, so a canonical posting accumulates them. A LEFT JOIN therefore
+       -- returns one row per source row, and that broke three different ways:
+       -- the block sweeper compared a posting against itself and tripped
+       -- opp_merge_not_self; the candidate LIMIT below was consumed by duplicates
+       -- so genuine duplicates went unseen; and the verdict depended on whichever
+       -- source row the planner happened to return. Ordering by id makes the
+       -- chosen row stable, which dedup needs to be reproducible.
+       (SELECT s.apply_url FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.apply_url IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS apply_url,
+       (SELECT s.ats_job_id FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.ats_job_id IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS ats_job_id
   FROM opportunity o
-  LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.block_key = $1
    AND o.id <> $2
    AND o.merged_into IS NULL
@@ -234,11 +248,24 @@ const getOpportunityForDedupe = `-- name: GetOpportunityForDedupe :one
 SELECT o.id, o.version, o.company_id, o.title_normalized, o.content_hash,
        o.simhash, o.block_key, o.location_country, o.remote_geo_scope, o.ats_type,
        coalesce(length(o.description_text), 0)::int AS text_len,
-       s.apply_url, s.ats_job_id
+       -- Deterministic scalar subqueries, NOT a join.
+       --
+       -- opportunity_source is one-to-MANY and hard rule 11 keeps every row on a
+       -- merge, so a canonical posting accumulates them. A LEFT JOIN therefore
+       -- returns one row per source row, and that broke three different ways:
+       -- the block sweeper compared a posting against itself and tripped
+       -- opp_merge_not_self; the candidate LIMIT below was consumed by duplicates
+       -- so genuine duplicates went unseen; and the verdict depended on whichever
+       -- source row the planner happened to return. Ordering by id makes the
+       -- chosen row stable, which dedup needs to be reproducible.
+       (SELECT s.apply_url FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.apply_url IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS apply_url,
+       (SELECT s.ats_job_id FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.ats_job_id IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS ats_job_id
   FROM opportunity o
-  LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.id = $1
- LIMIT 1
 `
 
 type GetOpportunityForDedupeRow struct {
@@ -321,9 +348,23 @@ const listBlockMembers = `-- name: ListBlockMembers :many
 SELECT o.id, o.version, o.company_id, o.title_normalized, o.content_hash,
        o.simhash, o.location_country, o.remote_geo_scope, o.ats_type, o.first_seen_at,
        coalesce(length(o.description_text), 0)::int AS text_len,
-       s.apply_url, s.ats_job_id
+       -- Deterministic scalar subqueries, NOT a join.
+       --
+       -- opportunity_source is one-to-MANY and hard rule 11 keeps every row on a
+       -- merge, so a canonical posting accumulates them. A LEFT JOIN therefore
+       -- returns one row per source row, and that broke three different ways:
+       -- the block sweeper compared a posting against itself and tripped
+       -- opp_merge_not_self; the candidate LIMIT below was consumed by duplicates
+       -- so genuine duplicates went unseen; and the verdict depended on whichever
+       -- source row the planner happened to return. Ordering by id makes the
+       -- chosen row stable, which dedup needs to be reproducible.
+       (SELECT s.apply_url FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.apply_url IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS apply_url,
+       (SELECT s.ats_job_id FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.ats_job_id IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS ats_job_id
   FROM opportunity o
-  LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.block_key = $1
    AND o.merged_into IS NULL
    AND o.unmerged_at IS NULL

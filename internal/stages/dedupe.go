@@ -264,6 +264,14 @@ func (d *Deduper) sweepOne(ctx context.Context, blockKey string) (int, error) {
 			if gone[members[j].ID.String()] {
 				continue
 			}
+			// Defence in depth. The query no longer duplicates a posting, but a
+			// self-merge is caught by a CHECK constraint mid-transaction, and
+			// discovering it there means an error log and a rolled-back sweep
+			// rather than a skipped comparison. Cheap to assert, expensive to
+			// rediscover.
+			if members[j].ID == members[i].ID {
+				continue
+			}
 			other := toCandidate(members[j])
 			v := dedupe.Decide(keeper, other)
 			if !v.Same {

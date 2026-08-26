@@ -213,3 +213,136 @@ func TestSlugifyIsIdempotent(t *testing.T) {
 		}
 	}
 }
+
+// TestResolvePicksProviderFromWhicheverKeyIsSet: adding one line to .env should
+// be enough to turn extraction on.
+func TestResolvePicksProviderFromWhicheverKeyIsSet(t *testing.T) {
+	p, err := Resolve(ResolveConfig{OpenAIAPIKey: "sk-test"})
+	if err != nil {
+		t.Fatalf("an OpenAI key alone should resolve: %v", err)
+	}
+	if got := p.ModelID(); got != "openai:"+DefaultOpenAIModel {
+		t.Errorf("model id %q, want the openai-prefixed default", got)
+	}
+
+	p, err = Resolve(ResolveConfig{AnthropicAPIKey: "sk-test"})
+	if err != nil {
+		t.Fatalf("an Anthropic key alone should resolve: %v", err)
+	}
+	if got := p.ModelID(); got != DefaultAnthropicModel {
+		t.Errorf("model id %q, want %q", got, DefaultAnthropicModel)
+	}
+}
+
+// TestTwoKeysWithoutAChoiceIsAnError.
+//
+// Not a precedence rule. Which vendor read a posting is part of its extraction
+// cache key (hard rule 8) and part of the audit trail, so picking it by
+// alphabetical accident is not a decision anyone made.
+func TestTwoKeysWithoutAChoiceIsAnError(t *testing.T) {
+	if _, err := Resolve(ResolveConfig{
+		AnthropicAPIKey: "a", OpenAIAPIKey: "b",
+	}); err == nil {
+		t.Fatal("two keys and no EXTRACTION_PROVIDER resolved silently")
+	}
+	// An explicit choice settles it.
+	p, err := Resolve(ResolveConfig{
+		Provider: ProviderOpenAI, AnthropicAPIKey: "a", OpenAIAPIKey: "b",
+	})
+	if err != nil {
+		t.Fatalf("an explicit provider should win: %v", err)
+	}
+	if !strings.HasPrefix(p.ModelID(), "openai:") {
+		t.Errorf("explicit openai resolved to %q", p.ModelID())
+	}
+}
+
+// TestModelIDIsVendorQualified guards the cache key.
+//
+// Two vendors can ship a model with the same name. Hard rule 8 makes the model
+// id part of the determinism guarantee, so an unqualified id would let a
+// provider switch silently reuse the other vendor's cached output — which is
+// exactly the "fit scores flap for postings that did not change" failure the
+// cache exists to prevent.
+func TestModelIDIsVendorQualified(t *testing.T) {
+	p, err := NewOpenAIProvider(OpenAIConfig{APIKey: "x", Model: "shared-name"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ModelID() == "shared-name" {
+		t.Error("the OpenAI model id is not vendor-qualified")
+	}
+}
+
+// TestNoKeyIsADistinctError: hard rule 7 needs "no model configured" to be
+// separable from "the model call failed", because only one of them should
+// degrade a posting rather than retry it.
+func TestNoKeyIsADistinctError(t *testing.T) {
+	_, err := Resolve(ResolveConfig{})
+	if !errors.Is(err, ErrNoProvider) {
+		t.Fatalf("no keys gave %v, want ErrNoProvider", err)
+	}
+	_, err = Resolve(ResolveConfig{Provider: ProviderNone, OpenAIAPIKey: "x"})
+	if !errors.Is(err, ErrNoProvider) {
+		t.Fatalf("provider=none gave %v, want ErrNoProvider", err)
+	}
+}
+
+func TestUnknownProviderIsRejected(t *testing.T) {
+	if _, err := Resolve(ResolveConfig{Provider: "gemini", OpenAIAPIKey: "x"}); err == nil {
+		t.Fatal("an unknown provider was accepted; a typo must not change the model")
+	}
+}
+
+// TestReasoningEffortOnlyForModelsThatTakeIt: sending the parameter to a
+// non-reasoning model is a 400, and paying that per posting is not acceptable.
+func TestReasoningEffortOnlyForModelsThatTakeIt(t *testing.T) {
+	for _, m := range []string{"gpt-5-mini", "gpt-5", "o3", "o4-mini"} {
+		if !supportsReasoningEffort(m) {
+			t.Errorf("%s should accept reasoning_effort", m)
+		}
+	}
+	for _, m := range []string{"gpt-4.1-mini", "gpt-4o", "gpt-3.5-turbo"} {
+		if supportsReasoningEffort(m) {
+			t.Errorf("%s does not accept reasoning_effort", m)
+		}
+	}
+}
+
+// TestClaudeModelNameIsRejectedByTheOpenAIProvider is a regression test for a
+// real misconfiguration.
+//
+// EXTRACTION_MODEL is one variable shared by both providers. A .env carrying
+// EXTRACTION_MODEL=claude-opus-5 from the Anthropic default, plus a newly added
+// OPENAI_API_KEY, resolved to "openai:claude-opus-5" and would have 400'd on
+// every posting in the corpus — silently, as a per-posting enrichment failure
+// that hard rule 7 correctly degrades rather than escalates.
+func TestClaudeModelNameIsRejectedByTheOpenAIProvider(t *testing.T) {
+	_, err := Resolve(ResolveConfig{
+		Provider: ProviderOpenAI, OpenAIAPIKey: "x", Model: "claude-opus-5",
+	})
+	if err == nil {
+		t.Fatal("a claude model name was accepted for the openai provider")
+	}
+	if !strings.Contains(err.Error(), "EXTRACTION_MODEL") {
+		t.Errorf("the error should name the variable to fix, got: %v", err)
+	}
+
+	// And the mirror image.
+	if _, err := Resolve(ResolveConfig{
+		Provider: ProviderAnthropic, AnthropicAPIKey: "x", Model: "gpt-5-mini",
+	}); err == nil {
+		t.Fatal("a gpt model name was accepted for the anthropic provider")
+	}
+}
+
+// TestAnUnfamiliarModelNameIsAllowed: the guard rejects the other vendor's
+// namespace, not everything it does not recognise. A gateway or a fine-tune can
+// be called anything, and a whitelist of model names goes stale immediately.
+func TestAnUnfamiliarModelNameIsAllowed(t *testing.T) {
+	if _, err := Resolve(ResolveConfig{
+		Provider: ProviderOpenAI, OpenAIAPIKey: "x", Model: "our-tuned-extractor-v3",
+	}); err != nil {
+		t.Errorf("an unfamiliar name should be allowed: %v", err)
+	}
+}

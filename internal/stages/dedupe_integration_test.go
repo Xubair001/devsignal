@@ -4,6 +4,7 @@ package stages
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -228,5 +229,103 @@ func TestSweepIsIdempotent(t *testing.T) {
 	}
 	if cycles != 0 {
 		t.Errorf("%d merge cycles present", cycles)
+	}
+}
+
+// TestBlockMembersAreNotDuplicatedBySourceRows is a regression test for a bug
+// that got worse over time.
+//
+// opportunity_source is one-to-many and hard rule 11 keeps every row on a merge,
+// so a canonical posting accumulates them. The three dedupe queries used to
+// LEFT JOIN that table, returning one row per source row. Three symptoms, one
+// cause: the block sweeper compared a posting against ITSELF and tripped the
+// opp_merge_not_self CHECK; the candidate LIMIT was consumed by duplicates so
+// genuine duplicates went unseen; and the verdict depended on whichever source
+// row the planner returned.
+//
+// Observed in a real run: "record merge: new row for relation
+// opportunity_merge violates check constraint opp_merge_not_self".
+func TestBlockMembersAreNotDuplicatedBySourceRows(t *testing.T) {
+	pool := dbtest.Pool(t)
+	ctx := context.Background()
+	q := store.New(pool)
+
+	var tenantID, companyID, oppID, sourceID pgtype.UUID
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO tenant (display_name) VALUES ('Dedupe Dup Test') RETURNING id`).
+		Scan(&tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO company (canonical_domain, display_name) VALUES ($1,'Dup Co') RETURNING id`,
+		"dup-"+uuid.NewString()[:8]+".example").Scan(&companyID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO source (name, tier, type, legal_basis, poll_interval)
+		VALUES ($1,'a','greenhouse_public_board_api','test','15 minutes')
+		RETURNING id`, "dup-src-"+uuid.NewString()[:8]).Scan(&sourceID); err != nil {
+		t.Fatal(err)
+	}
+
+	blockKey := "dup-block-" + uuid.NewString()[:8]
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO opportunity (company_id, title_raw, title_normalized, block_key,
+		                         pipeline_state)
+		VALUES ($1,'Data Engineer','data engineer',$2,'ready') RETURNING id`,
+		companyID, blockKey).Scan(&oppID); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		c := context.Background()
+		_, _ = pool.Exec(c, `DELETE FROM opportunity WHERE company_id=$1`, companyID)
+		_, _ = pool.Exec(c, `DELETE FROM company WHERE id=$1`, companyID)
+		_, _ = pool.Exec(c, `DELETE FROM source WHERE id=$1`, sourceID)
+		_, _ = pool.Exec(c, `DELETE FROM tenant WHERE id=$1`, tenantID)
+	})
+
+	// THREE source rows on one posting: exactly what a canonical row looks like
+	// after two merges.
+	for i := range 3 {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO opportunity_source (opportunity_id, source_id, source_job_id,
+			    apply_url, ats_job_id)
+			VALUES ($1,$2,$3,$4,$5)`,
+			oppID, sourceID, fmt.Sprintf("ext-%d-%s", i, uuid.NewString()[:6]),
+			fmt.Sprintf("https://example.test/apply/%d", i),
+			fmt.Sprintf("job-%d", i),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	members, err := q.ListBlockMembers(ctx, &blockKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("ListBlockMembers returned %d rows for ONE posting with 3 source "+
+			"rows; the sweeper would compare it against itself", len(members))
+	}
+
+	// And the candidate query must not spend its budget on the same posting.
+	cands, err := q.FindBlockCandidates(ctx, store.FindBlockCandidatesParams{
+		BlockKey:      &blockKey,
+		ExcludeID:     pgtype.UUID{},
+		MaxCandidates: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, c := range cands {
+		seen[c.ID.String()]++
+	}
+	for id, n := range seen {
+		if n > 1 {
+			t.Errorf("candidate %s appeared %d times; duplicates consume the "+
+				"candidate LIMIT and real duplicates go unseen", id, n)
+		}
 	}
 }

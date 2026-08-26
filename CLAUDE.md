@@ -79,11 +79,31 @@ Next: step 22 (calibration) needs outcome data the engagement log is now collect
 (market intelligence) is blocked on a demand-series writer that **does not exist** — see
 [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
 
-Extraction runs against a `Provider` interface, so the model is a config value
-(`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
-environment, so extraction has only ever run against a fake provider — the cache,
-validation and degrade paths are proven, but no live model call has been made.
-`--role=spend` reports what it costs once one is. Scaling past the two boards currently
+Extraction runs against a `Provider` interface with **two implementations**:
+`anthropic` (SDK, prompt caching, schema-constrained output) and `openai` (raw HTTP per hard rule
+4, strict Structured Outputs). `enrich.Resolve` picks one — explicitly via `EXTRACTION_PROVIDER`,
+or inferred from whichever key is set. Two keys and no explicit choice is an **error**, not a
+precedence rule: which vendor read a posting is part of its cache key.
+
+**Extraction has now run live**, against OpenAI. The same `JSONSchema()` is accepted by OpenAI's
+strict mode unmodified, so there is one schema, not two. Two things were measured rather than
+assumed:
+
+- `gpt-5-mini` at `reasoning_effort=minimal` returned **12 skills in 280 output tokens and 5.2 s**.
+  At default effort the same posting cost **2,531 output tokens and 38 s** and returned **eleven**.
+  Extraction is mechanical reading; a reasoning budget bought a worse answer. Minimal is the default.
+- OpenAI caches prompt prefixes automatically only from 1024 tokens, which `Instructions` does not
+  reach. So the content-hash cache in `internal/enrich` — not the vendor's — is what makes
+  re-extraction free. Hard rule 8 is provider-neutral by design.
+
+`ModelID()` is vendor-qualified (`openai:gpt-5-mini`), because two vendors can ship the same model
+name and hard rule 8 makes that string the determinism guarantee. `--role=spend` reports cost per
+model id per lane.
+
+**The 45 skill points still do not score, and extraction was only half the blocker.** `profile_skill`
+has an upsert and a read but **no writer anywhere in the product** — resume ingestion extracts text,
+not skills. Posting skills now exist; the profile side is empty, and `required_skills` needs both.
+Extracting profile skills from resume text is the missing piece, and it is now possible. Scaling past the two boards currently
 registered is blocked on the Tier-A source list, not on code — `add-sources` takes a file.
 
 Erasure is real and `make check-erasure` proves it. The one part still open is BACKUPS: either

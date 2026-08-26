@@ -407,15 +407,38 @@ func runWorkers(ctx context.Context, appCfg *config.Config, log *slog.Logger, po
 	deduper := stages.NewDeduper(pool, log)
 
 	// The model is a configuration value, not an architectural commitment: the
-	// provider is an interface so tiers can be compared against the regression
-	// set without touching the pipeline.
-	provider, perr := enrich.NewClaudeProvider(enrich.ClaudeConfig{
-		APIKey: appCfg.AnthropicAPIKey, Model: appCfg.ExtractionModel,
+	// provider is an interface so tiers — and now vendors — can be compared
+	// against the regression set without touching the pipeline.
+	provider, perr := enrich.Resolve(enrich.ResolveConfig{
+		Provider:        appCfg.ExtractionProvider,
+		AnthropicAPIKey: appCfg.AnthropicAPIKey,
+		OpenAIAPIKey:    appCfg.OpenAIAPIKey,
+		Model:           appCfg.ExtractionModel,
+		ReasoningEffort: appCfg.ExtractionReasoningEffort,
 	})
-	if perr != nil {
+	switch {
+	case errors.Is(perr, enrich.ErrNoProvider):
+		// Hard rule 7: no stage may block another. A worker with no model still
+		// has real work to do — fetch, parse, normalize, dedup, embed — and a
+		// posting with no extracted skills is still better than an invisible one.
+		// Loud, because silently degrading every posting is not something to
+		// discover from a dashboard three weeks later.
+		log.Warn("extraction disabled; postings will reach ready with a degraded "+
+			"quality flag and no extracted skills", "reason", perr.Error())
+	case perr != nil:
+		// A misconfiguration, as opposed to an absence. This one stops the worker:
+		// running with the wrong model silently would poison the extraction cache,
+		// which is keyed on model id and is meant to be the determinism guarantee.
 		return fmt.Errorf("extraction provider: %w", perr)
+	default:
+		log.Info("extraction provider ready", "model_id", provider.ModelID())
 	}
-	enricher := stages.NewEnricher(pool, enrich.NewService(pool, provider, log), log)
+
+	var enrichSvc *enrich.Service
+	if provider != nil {
+		enrichSvc = enrich.NewService(pool, provider, log)
+	}
+	enricher := stages.NewEnricher(pool, enrichSvc, log)
 
 	// Local, deterministic and free by default. A hosted model drops in behind
 	// the interface once the eval harness shows retrieval quality justifies the
