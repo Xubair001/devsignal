@@ -376,3 +376,78 @@ func TestErasureRemovesTheProfileVector(t *testing.T) {
 		t.Errorf("erasure incomplete: complete=%v traces=%d", rep.Complete, rep.TracesRemaining)
 	}
 }
+
+// A listing flag is about the POSTING. Erasing its author must anonymize the
+// report rather than delete it: a scam listing is still a problem for everyone
+// else after one reporter closes their account.
+func TestErasureAnonymizesFlagsRatherThanDeletingThem(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	svc := testService(t, pool)
+	userID, tenantID := newUser(t, pool)
+
+	head := "Backend engineer"
+	if _, err := svc.Save(ctx, userID, tenantID, Input{Headline: &head}); err != nil {
+		t.Fatal(err)
+	}
+
+	var companyID, oppID pgtype.UUID
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO company (canonical_domain, display_name) VALUES ($1,'Flag Co') RETURNING id`,
+		"flag-"+uuid.NewString()[:8]+".example").Scan(&companyID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO opportunity (company_id, title_raw, title_normalized, pipeline_state)
+		VALUES ($1,'Suspicious Role','suspicious role','ready') RETURNING id`,
+		companyID).Scan(&oppID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		c := context.Background()
+		_, _ = pool.Exec(c, `DELETE FROM opportunity WHERE company_id=$1`, companyID)
+		_, _ = pool.Exec(c, `DELETE FROM company WHERE id=$1`, companyID)
+	})
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO opportunity_flag (opportunity_id, reported_by, reason)
+		VALUES ($1,$2,'scam_or_fraud')`, oppID, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := svc.Erase(ctx, userID)
+	if err != nil {
+		t.Fatalf("erase: %v", err)
+	}
+
+	// The flag survives, with no author.
+	var count, withAuthor int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*), count(reported_by) FROM opportunity_flag WHERE opportunity_id=$1`,
+		oppID).Scan(&count, &withAuthor); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("%d flags survived erasure, want 1 — the listing is still a problem", count)
+	}
+	if withAuthor != 0 {
+		t.Error("the flag still names its reporter after erasure")
+	}
+
+	// And the report says so, rather than leaving it to a cascade nobody counted.
+	var step *store.ListErasureStepsRow
+	for i := range rep.Steps {
+		if rep.Steps[i].Location == LocFlags {
+			step = &rep.Steps[i]
+		}
+	}
+	if step == nil {
+		t.Fatal("no erasure step recorded for listing flags")
+	}
+	if step.Status != "done" || step.Items < 1 {
+		t.Errorf("flag step: status=%q items=%d, want done with at least 1",
+			step.Status, step.Items)
+	}
+	if !rep.Complete || rep.TracesRemaining != 0 {
+		t.Errorf("erasure incomplete: complete=%v traces=%d", rep.Complete, rep.TracesRemaining)
+	}
+}

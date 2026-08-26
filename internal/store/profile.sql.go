@@ -12,6 +12,26 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 )
 
+const anonymizeUserFlags = `-- name: AnonymizeUserFlags :execrows
+UPDATE opportunity_flag SET reported_by = NULL
+ WHERE reported_by = $1
+`
+
+// Erasure. A flag is about the POSTING, not the reporter, so the report survives
+// with its author removed rather than being deleted.
+//
+// Done explicitly rather than left to the ON DELETE SET NULL cascade, so the
+// erasure report can state a count for it. A scam report vanishing because
+// someone closed their account would be the wrong trade — the listing is still
+// a problem for everyone else.
+func (q *Queries) AnonymizeUserFlags(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, anonymizeUserFlags, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeErasureRequest = `-- name: CompleteErasureRequest :exec
 UPDATE erasure_request SET completed_at = now()
  WHERE id = $1

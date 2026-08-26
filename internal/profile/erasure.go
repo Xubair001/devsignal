@@ -37,6 +37,10 @@ const (
 	LocEligibility = "eligibility_results"
 	// Live since step 17.
 	LocEngagement = "engagement_events"
+	// Live since step 19. Anonymized rather than deleted: a listing flag is about
+	// the posting, and a scam report must not vanish because its author closed
+	// their account.
+	LocFlags = "listing_flags"
 
 	// Declared but not yet applicable: these stores exist in the design and will
 	// hold user-derived data at their step. Recorded as not_applicable rather
@@ -56,6 +60,7 @@ var AllLocations = []string{
 	LocFitScores,
 	LocEligibility,
 	LocEngagement,
+	LocFlags,
 	LocSearchIndex,
 	LocRedisCache,
 	LocAnalytics,
@@ -125,6 +130,7 @@ func (s *Service) Erase(ctx context.Context, userID pgtype.UUID) (*ErasureReport
 		{LocFitScores, s.q.DeleteFitScores},
 		{LocEligibility, s.q.DeleteEligibilityResults},
 		{LocEngagement, s.q.DeleteEngagementEvents},
+		{LocFlags, s.q.AnonymizeUserFlags},
 		{LocResumeRows, s.q.DeleteResumeRows},
 		{LocProfileSkills, s.q.DeleteProfileSkills},
 		{LocProfile, s.q.DeleteProfileData},

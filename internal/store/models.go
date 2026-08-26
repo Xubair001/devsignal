@@ -21,6 +21,7 @@ type AppUser struct {
 	LastLoginAt     pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	Role            string
 }
 
 type AuditLog struct {
@@ -214,6 +215,8 @@ type Opportunity struct {
 	ExtractionContentHash      []byte
 	EnrichedAt                 pgtype.Timestamptz
 	ExtractionError            *string
+	// Set when an administrator reversed a merge. Dedup never re-merges these: a human decision outranks a similarity score.
+	UnmergedAt pgtype.Timestamptz
 }
 
 type OpportunityEmbedding struct {
@@ -223,6 +226,20 @@ type OpportunityEmbedding struct {
 	EmbeddingDim     int32
 	Embedding        pgvector.Vector
 	CreatedAt        pgtype.Timestamptz
+}
+
+// User-reported listing problems with a review queue. reported_by is nullable so a flag survives the reporter's erasure.
+type OpportunityFlag struct {
+	ID             pgtype.UUID
+	OpportunityID  pgtype.UUID
+	ReportedBy     pgtype.UUID
+	Reason         string
+	Detail         *string
+	Status         string
+	ResolutionNote *string
+	ResolvedBy     pgtype.UUID
+	ResolvedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 type OpportunityMerge struct {
@@ -235,6 +252,8 @@ type OpportunityMerge struct {
 	MergedBy          string
 	MergedAt          pgtype.Timestamptz
 	UndoneAt          pgtype.Timestamptz
+	// The opportunity_source rows this merge moved. Null for merges recorded before the column existed; those cannot be reversed automatically.
+	MovedSourceIds []pgtype.UUID
 }
 
 type OpportunitySkill struct {

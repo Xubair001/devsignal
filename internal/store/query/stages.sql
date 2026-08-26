@@ -42,16 +42,25 @@ SELECT o.id, o.company_id, o.ats_type, o.title_normalized, o.content_hash,
  WHERE o.block_key = sqlc.arg(block_key)
    AND o.id <> sqlc.arg(exclude_id)
    AND o.merged_into IS NULL
+   -- A human already said these are different roles. A simhash is not entitled
+   -- to overrule that, so an un-merged posting is never a merge candidate again.
+   AND o.unmerged_at IS NULL
    AND o.closed_at IS NULL
  LIMIT sqlc.arg(max_candidates)::int;
 
--- name: MoveSourceRows :execrows
+-- name: MoveSourceRows :many
+-- Returns the ids it moved, not just how many.
+--
+-- The count alone made un-merge impossible: with two merges into one canonical
+-- there is no way to infer which rows came from where. Hard rule 11 says merges
+-- are reversible, and this is what makes that true rather than aspirational.
 UPDATE opportunity_source
    SET opportunity_id = sqlc.arg(into_id),
        merge_reason = sqlc.arg(reason),
        merge_confidence = sqlc.arg(confidence),
        merged_by = 'dedupe'
- WHERE opportunity_id = sqlc.arg(from_id);
+ WHERE opportunity_id = sqlc.arg(from_id)
+RETURNING id;
 
 -- name: MarkMerged :execrows
 UPDATE opportunity SET merged_into = sqlc.arg(into_id), version = version + 1
@@ -59,16 +68,48 @@ UPDATE opportunity SET merged_into = sqlc.arg(into_id), version = version + 1
 
 -- name: RecordMerge :one
 INSERT INTO opportunity_merge (from_opportunity_id, into_opportunity_id, reason,
-                               confidence, source_rows_moved, merged_by)
-VALUES ($1,$2,$3,$4,$5,$6)
+                               confidence, source_rows_moved, merged_by,
+                               moved_source_ids)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
 RETURNING *;
 
+-- name: FindLatestMergeFor :one
+-- The merge that hid this posting, so it can be reversed.
+SELECT * FROM opportunity_merge
+ WHERE from_opportunity_id = sqlc.arg(from_opportunity_id) AND undone_at IS NULL
+ ORDER BY merged_at DESC
+ LIMIT 1;
+
 -- name: UndoMerge :one
--- Reversal is a first-class operation, not a recovery script: a false merge
--- hides a real job, and someone will need to undo one under time pressure.
+-- Marks the merge record reversed. One of three statements that make up an
+-- un-merge; see internal/admin.Unmerge for the whole operation, which must run in
+-- one transaction or a crash leaves a posting neither merged nor visible.
 UPDATE opportunity_merge SET undone_at = now()
  WHERE id = $1 AND undone_at IS NULL
 RETURNING *;
+
+-- name: RestoreSourceRows :execrows
+-- Moves exactly the rows a merge moved back to the posting they came from, and
+-- clears the merge provenance from them.
+UPDATE opportunity_source
+   SET opportunity_id = sqlc.arg(back_to_id),
+       merge_reason = NULL, merge_confidence = NULL, merged_by = NULL
+ WHERE id = ANY (sqlc.arg(source_row_ids)::uuid[]);
+
+-- name: RestoreMergedOpportunity :execrows
+-- Makes the posting visible again and marks it as human-unmerged.
+--
+-- unmerged_at is what stops dedup re-merging it on the next pass. Without it the
+-- operator watches their un-merge undo itself: the posting becomes claimable, the
+-- same block yields the same near-identical pair, and the heuristic wins.
+--
+-- pipeline_state moves to 'deduped' rather than staying where it was, so the
+-- posting resumes AFTER the dedupe stage and continues to enrichment on its own.
+UPDATE opportunity
+   SET merged_into = NULL, unmerged_at = now(), pipeline_state = 'deduped',
+       version = version + 1, attempts = 0, last_error = NULL,
+       next_attempt_at = now(), lease_until = NULL
+ WHERE id = sqlc.arg(opportunity_id) AND merged_into IS NOT NULL;
 
 -- name: NormalizationStats :many
 SELECT normalization_version,
@@ -123,6 +164,7 @@ SELECT o.id, o.version, o.company_id, o.title_normalized, o.content_hash,
   LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.block_key = $1
    AND o.merged_into IS NULL
+   AND o.unmerged_at IS NULL
    AND o.closed_at IS NULL
  ORDER BY o.first_seen_at, o.id;
 

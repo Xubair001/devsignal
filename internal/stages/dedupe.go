@@ -140,7 +140,7 @@ func (d *Deduper) merge(ctx context.Context, from, into pgtype.UUID, blockKey st
 	reason := string(v.Reason)
 	conf := v.Confidence
 
-	moved, err := q.MoveSourceRows(ctx, store.MoveSourceRowsParams{
+	movedIDs, err := q.MoveSourceRows(ctx, store.MoveSourceRowsParams{
 		IntoID: into, Reason: &reason, Confidence: &conf, FromID: from,
 	})
 	if err != nil {
@@ -161,8 +161,11 @@ func (d *Deduper) merge(ctx context.Context, from, into pgtype.UUID, blockKey st
 		IntoOpportunityID: into,
 		Reason:            reason,
 		Confidence:        &conf,
-		SourceRowsMoved:   int32(moved),
+		SourceRowsMoved:   int32(len(movedIDs)),
 		MergedBy:          "dedupe",
+		// The ids, not just the count. Without them the merge cannot be reversed,
+		// and hard rule 11 requires that it can be.
+		MovedSourceIds: movedIDs,
 	}); err != nil {
 		return fmt.Errorf("record merge: %w", err)
 	}
@@ -172,7 +175,7 @@ func (d *Deduper) merge(ctx context.Context, from, into pgtype.UUID, blockKey st
 	}
 	d.log.Info("merged duplicate",
 		"from", from.String(), "into", into.String(),
-		"reason", reason, "confidence", conf, "source_rows_moved", moved)
+		"reason", reason, "confidence", conf, "source_rows_moved", len(movedIDs))
 	return nil
 }
 

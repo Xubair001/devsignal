@@ -7,14 +7,14 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–17 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–17 and 19 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
 embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
 score and its explanation, the evaluation harness that gates every scoring change, and the
-feed with saves, applications and dismiss-with-reason. It ingests real postings from multiple
-boards:
+feed with saves, applications and dismiss-with-reason, and the admin console with quarantine,
+merge tools and the purge drill. It ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -34,9 +34,16 @@ quality. Behavioural labels replace the rubric at step 17.
 behavioural evaluation set that will replace the rubric labels, and the ranking decision record
 blueprint §32 requires. Nothing there updates or deletes — un-saving appends.
 
+`/internal/admin` is the operations surface: source health with a quarantine toggle, full
+provenance with a working un-merge, the merge-candidate and listing-flag review queues, re-run
+controls, and a source purge that counts before it deletes. Admin is a role on `app_user`,
+granted only from the binary (`--role=grant-admin --email=…`) so a compromised session cannot
+mint more admins. Every action lands in the hash-chained audit log in the same transaction as
+the change.
+
 Next: step 18 is the daily digest, which needs the email decisions in
-[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 19 (admin console) and the
-frontend are both unblocked — see [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
+[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 20 (SLOs) is unblocked, and
+so is the frontend — see [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -222,6 +229,20 @@ blueprint's audit found.
     requirements. Any redistribution scheme has that property. Below 60% coverage the band is
     "Not enough information", which is a different statement from "Stretch" and only one of them
     is about the user.
+
+24. **Reversing a merge must restore data, not just record an intention.** `opportunity_merge`
+    stores the ids of the source rows it moved, not only a count: with two merges into one
+    canonical there is nothing to infer from, and the original `UndoMerge` stamped `undone_at`
+    while changing no data at all. An un-merge is three statements in one transaction — restore
+    exactly those rows, clear `merged_into` and stamp `unmerged_at`, mark the merge reversed.
+    Dedup skips anything with `unmerged_at` set: a human said these are different roles and a
+    simhash does not overrule that, or the operator watches their un-merge undo itself.
+
+25. **A cleanup delete is scoped to what the operation is about.** The source purge deletes
+    orphaned postings only from the ids that source contributed to. A table-wide
+    `WHERE NOT EXISTS` orphan sweep would remove unrelated postings as a side effect of purging
+    one source — cleanup with unbounded blast radius. Destructive admin actions also count first
+    and require the operator to echo the number back.
 
 ## The two numbers
 

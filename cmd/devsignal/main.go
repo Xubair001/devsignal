@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/Xubair001/devsignal/internal/admin"
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
 	"github.com/Xubair001/devsignal/internal/embed"
@@ -57,18 +58,20 @@ import (
 func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
-			"spend | retrieve | match | eval | reindex-profiles | digest | admin")
+			"spend | retrieve | match | eval | reindex-profiles | "+
+			"grant-admin | revoke-admin | list-admins | digest")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
 	userID := flag.String("user", "", "user id (retrieve, match)")
+	email := flag.String("email", "", "user email (grant-admin, revoke-admin)")
 	recordBaseline := flag.Bool("record-baseline", false,
 		"eval: overwrite the committed baseline with this run (a reviewed act)")
 	flag.Parse()
 
 	if err := run(*role, flags{
 		source: *srcName, file: *srcFile, reviewer: *reviewer, user: *userID,
-		recordBaseline: *recordBaseline,
+		email: *email, recordBaseline: *recordBaseline,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -84,6 +87,7 @@ type flags struct {
 	file           string
 	reviewer       string
 	user           string
+	email          string
 	recordBaseline bool
 }
 
@@ -149,7 +153,13 @@ func run(role string, f flags) error {
 		return evalReport(ctx, log, pool, f.recordBaseline)
 	case "reindex-profiles":
 		return reindexProfiles(ctx, log, pool)
-	case "digest", "admin":
+	case "grant-admin":
+		return grantAdmin(ctx, log, pool, f.email, true)
+	case "revoke-admin":
+		return grantAdmin(ctx, log, pool, f.email, false)
+	case "list-admins":
+		return listAdmins(ctx, pool)
+	case "digest":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
@@ -234,6 +244,16 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 
 	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
 	feedH := engagement.NewHandler(matcher, engagementSvc, log)
+	adminH := admin.NewHandler(admin.New(pool, log), log)
+
+	// The operations surface. Authenticated like everything else, then gated by one
+	// authorization middleware — not a check per handler, because the handler that
+	// ends up missing it is always the destructive one.
+	r.Route("/internal/admin", func(adm chi.Router) {
+		adm.Use(authH.Authenticator)
+		adm.Use(adminH.RequireAdmin)
+		adm.Mount("/", adminH.Routes())
+	})
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Mount("/auth", authH.Routes())
@@ -252,6 +272,9 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 			// and reads identity from the context, never from a parameter.
 			priv.Mount("/feed", feedH.Routes())
 			priv.Mount("/engagement", feedH.EngagementRoutes())
+			// Reporting a listing is a user action, not an admin one, so it lives
+			// under the user API rather than behind the admin gate.
+			priv.Mount("/listings", adminH.FlagRoutes())
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {
@@ -903,3 +926,59 @@ func evalReport(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, recor
 }
 
 func round3(v float64) float64 { return math.Round(v*1000) / 1000 }
+
+// grantAdmin promotes or demotes a user.
+//
+// Deliberately a binary role rather than an HTTP endpoint. Granting admin needs
+// database access, so a compromised admin session cannot mint more admins — which
+// is the difference between one bad afternoon and a persistent foothold.
+func grantAdmin(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, email string, grant bool) error {
+	if email == "" {
+		return fmt.Errorf("--email is required")
+	}
+	q := store.New(pool)
+
+	var n int64
+	var err error
+	if grant {
+		n, err = q.GrantAdmin(ctx, email)
+	} else {
+		n, err = q.RevokeAdmin(ctx, email)
+	}
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("no active user with that email")
+	}
+	// Logged, not audited: there is no session and so no actor to attribute it to.
+	// The audit log records what admins DO; this records how they became one, and
+	// the honest place for it is the operator's own shell history and this line.
+	log.Warn("admin role changed", "email_domain", domainOf(email), "granted", grant)
+	fmt.Printf("admin %s for %s\n", map[bool]string{true: "granted", false: "revoked"}[grant], email)
+	return nil
+}
+
+func listAdmins(ctx context.Context, pool *pgxpool.Pool) error {
+	rows, err := store.New(pool).ListAdmins(ctx)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		fmt.Println("no administrators. grant one with --role=grant-admin --email=you@example.com")
+		return nil
+	}
+	for _, r := range rows {
+		fmt.Printf("  %-40s since %s\n", r.Email, r.CreatedAt.Time.Format(time.DateOnly))
+	}
+	return nil
+}
+
+// domainOf keeps a full email address out of the logs (hard rule 13) while
+// leaving enough to correlate an action with an operator.
+func domainOf(email string) string {
+	if i := strings.LastIndex(email, "@"); i >= 0 {
+		return email[i+1:]
+	}
+	return "unknown"
+}

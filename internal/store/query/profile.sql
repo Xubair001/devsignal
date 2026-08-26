@@ -177,3 +177,14 @@ SELECT pe.embedding, pe.embedding_model, pe.profile_version AS embedded_profile_
   JOIN profile p ON p.user_id = pe.user_id
  WHERE pe.user_id = sqlc.arg(user_id)
    AND pe.embedding_version = sqlc.arg(embedding_version);
+
+-- name: AnonymizeUserFlags :execrows
+-- Erasure. A flag is about the POSTING, not the reporter, so the report survives
+-- with its author removed rather than being deleted.
+--
+-- Done explicitly rather than left to the ON DELETE SET NULL cascade, so the
+-- erasure report can state a count for it. A scam report vanishing because
+-- someone closed their account would be the wrong trade — the listing is still
+-- a problem for everyone else.
+UPDATE opportunity_flag SET reported_by = NULL
+ WHERE reported_by = sqlc.arg(user_id);

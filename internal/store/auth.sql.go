@@ -115,7 +115,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Ten
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO app_user (tenant_id, email, password_hash)
-VALUES ($1, $2, $3) RETURNING id, tenant_id, email, password_hash, email_verified_at, status, failed_logins, locked_until, last_login_at, created_at, updated_at
+VALUES ($1, $2, $3) RETURNING id, tenant_id, email, password_hash, email_verified_at, status, failed_logins, locked_until, last_login_at, created_at, updated_at, role
 `
 
 type CreateUserParams struct {
@@ -139,6 +139,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
@@ -200,7 +201,7 @@ func (q *Queries) GetRefreshByHash(ctx context.Context, tokenHash []byte) (Refre
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, tenant_id, email, password_hash, email_verified_at, status, failed_logins, locked_until, last_login_at, created_at, updated_at FROM app_user WHERE email = $1
+SELECT id, tenant_id, email, password_hash, email_verified_at, status, failed_logins, locked_until, last_login_at, created_at, updated_at, role FROM app_user WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (AppUser, error) {
@@ -218,12 +219,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (AppUser, er
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, tenant_id, email, password_hash, email_verified_at, status, failed_logins, locked_until, last_login_at, created_at, updated_at FROM app_user WHERE id = $1
+SELECT id, tenant_id, email, password_hash, email_verified_at, status, failed_logins, locked_until, last_login_at, created_at, updated_at, role FROM app_user WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (AppUser, error) {
@@ -241,6 +243,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (AppUser, err
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
 	)
 	return i, err
 }
