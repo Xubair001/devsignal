@@ -171,9 +171,105 @@ than a starting condition. What exists instead:
   large count that is moving is healthy; a small one that is not is an incident, so
   the oldest entry per state travels with the count.
 
-## What step 21 needs from this
+## Step 21
 
-Step 21 is a load test against these objectives — "a test that can fail". It needs
-two things that do not exist yet: a metrics backend to read latency percentiles
-from under load, and enough corpus for the feed to be doing real work. The
-objectives and the arithmetic are ready for it.
+Built — see the load test section below. One correction to an earlier assumption
+recorded here: it does **not** need a metrics backend. A load test measures latency
+client-side from its own requests, which is where a user-facing latency objective
+belongs anyway.
+
+---
+
+# Load test (step 21)
+
+`make loadtest`, or `--role=loadtest --users=N --concurrency=N --duration=Ns`.
+
+Blueprint §35 calls step 21 "a test that can fail", so it **exits non-zero when an
+objective is breached**. A load test that only prints numbers is a benchmark, and a
+benchmark never tells you to stop.
+
+## How it measures
+
+Latency is taken **client-side**, from just before the request to just after the
+body is fully read. That is where a user-facing latency objective belongs:
+server-side handler time excludes connection setup, request parsing, response
+serialization and the body write, all of which the user waits for. It also means
+this needs no metrics backend to produce a percentile.
+
+It drives the **real router** in-process (`buildRouter`, shared with `--role=api`),
+with real session tokens hashed by `auth.HashToken`. A load test against a
+hand-built handler measures the hand-built handler.
+
+Two phases, because the blueprint has two latency objectives:
+
+- **cold** — one request per user, nothing cached: retrieval and scoring run in full.
+- **warm** — repeated requests, fit scores served from `fit_score`.
+
+Percentiles are over **successful requests only**. A 500 returning in 2ms would
+otherwise pull the p95 down, so a service failing fast would look fast. 4xx counts
+as *available*: a 400 is the API correctly rejecting a bad request and a 404 is a
+posting that does not exist, so counting them as failures would let a buggy client
+spend our error budget.
+
+## Measured capacity
+
+288 real postings, ~188 eligible per profile, 5 distinct personas, 16 CPUs:
+
+| concurrency | cold p95 | warm p95 | req/s | verdict |
+|---|---|---|---|---|
+| 8 | 115 ms | 70 ms | 131 | met |
+| 16 | 176 ms | 148 ms | 141 | met |
+| 32 | 571 ms | 413 ms | 98 | cached objective breached |
+| 64 | 687 ms | 699 ms | 108 | cached objective breached |
+
+**The feed meets its objectives up to roughly 16 concurrent requests, peaking near
+140 req/s.** Past that the 300 ms cached target breaks *and throughput falls* —
+141 to 98 req/s — which is the signature of queuing past the knee: latency grows
+without more work getting done.
+
+### What the bottleneck is not
+
+The obvious suspect was the connection pool at `max_conns=10`. It is not:
+quadrupling it to 40 moved warm p95 from 359 ms to 376 ms and throughput from 106
+to 113 req/s at concurrency 32. Within noise.
+
+### What it is
+
+Per-request CPU proportional to the **candidate** count, not the returned count.
+The feed scores every eligible candidate and returns seven. At ~188 candidates and
+140 req/s that is roughly 26,000 candidate scorings a second, plus response
+serialization.
+
+This is the stage-1 cap doing its job — `retrieve.DefaultMaxCandidates` bounds the
+worst case at 500 — but it means feed cost tracks the size of the eligible set
+rather than the page size. The lever, when it is needed, is to shrink the eligible
+set (tighter predicates, or scoring only the top-N by retrieval rank) rather than
+to add connections.
+
+## The bug this found
+
+The first run measured **842 ms for a single feed request**. One request was
+issuing **376 individual INSERTs** — 188 `eligibility_result` rows and 188
+`fit_score` rows, one network round trip each — an N+1 write introduced in step 15
+and never exercised until now.
+
+Batching them through `sqlc`'s `:batchexec` (a pgx pipeline, one round trip) took
+the same request to **82 ms**, and feed throughput from 6 to 78 req/s at
+concurrency 8. The statements are unchanged; only the number of times the request
+waits for the network is.
+
+A second bug was in the harness itself. It spawned a goroutine per user bounded by
+`errgroup.SetLimit`, so during the timed phase only the first `concurrency` users
+ever ran, and the rest fired a single request each as the deadline passed — that
+user's *first* request, cold, counted into the warm percentile. It reported warm
+p95 968 ms where the truth was 134 ms, which looked like the service degrading
+rather than the harness misreporting. Workers now pull users from a shared counter.
+
+## What these numbers are not
+
+**288 postings is far below the blueprint's 200–500K target corpus**, and the run
+prints that caveat every time. These latencies are a floor, not a prediction:
+retrieval cost grows with the eligible set, and at this size the planner does not
+even choose the vector index (measured in step 13 — it prefers an exact scan under
+a few thousand rows). A run against a realistic corpus is the test that matters,
+and it needs the corpus first.

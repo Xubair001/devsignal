@@ -148,6 +148,12 @@ eval: test-db ## ranking evaluation harness — gates scoring changes
 eval-record: test-db ## overwrite the committed eval baseline (a reviewed act)
 	@DATABASE_URL="$(DB_TEST_URL)" go run ./cmd/devsignal --role=eval --record-baseline
 
+.PHONY: loadtest
+loadtest: ## drive the real API under load and check the objectives (needs a corpus)
+	DATABASE_URL="$(DB_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
+	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
+	go run ./cmd/devsignal --role=loadtest --users=20 --concurrency=8 --duration=15s
+
 .PHONY: check-erasure
 check-erasure: test-db ## proves an erased user leaves no trace in any store
 	DATABASE_URL="$(DB_TEST_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \

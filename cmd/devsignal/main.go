@@ -34,6 +34,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
+	"github.com/Xubair001/devsignal/internal/loadtest"
 	"github.com/Xubair001/devsignal/internal/matching"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
@@ -60,12 +61,15 @@ func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
 			"spend | retrieve | match | eval | reindex-profiles | "+
-			"grant-admin | revoke-admin | list-admins | slo | digest")
+			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
 	userID := flag.String("user", "", "user id (retrieve, match)")
 	email := flag.String("email", "", "user email (grant-admin, revoke-admin)")
+	users := flag.Int("users", 0, "distinct profiles driving traffic (loadtest)")
+	concurrency := flag.Int("concurrency", 0, "in-flight requests (loadtest)")
+	duration := flag.Duration("duration", 0, "per-phase duration (loadtest)")
 	recordBaseline := flag.Bool("record-baseline", false,
 		"eval: overwrite the committed baseline with this run (a reviewed act)")
 	flag.Parse()
@@ -73,6 +77,7 @@ func main() {
 	if err := run(*role, flags{
 		source: *srcName, file: *srcFile, reviewer: *reviewer, user: *userID,
 		email: *email, recordBaseline: *recordBaseline,
+		users: *users, concurrency: *concurrency, duration: *duration,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -90,6 +95,9 @@ type flags struct {
 	user           string
 	email          string
 	recordBaseline bool
+	users          int
+	concurrency    int
+	duration       time.Duration
 }
 
 func run(role string, f flags) error {
@@ -162,6 +170,8 @@ func run(role string, f flags) error {
 		return listAdmins(ctx, pool)
 	case "slo":
 		return sloReport(ctx, pool)
+	case "loadtest":
+		return loadTest(ctx, cfg, log, pool, f)
 	case "digest":
 		return fmt.Errorf("role %q is not implemented yet", role)
 	default:
@@ -196,7 +206,15 @@ func openDB(ctx context.Context, cfg *config.Config, log *slog.Logger) (*pgxpool
 	return pool, nil
 }
 
-func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
+// buildRouter assembles the whole API.
+//
+// Extracted from serveAPI so the load test drives the REAL handler in-process
+// rather than a reconstruction of it. A load test against a hand-built router
+// measures the hand-built router, and the SLO it reports is about something users
+// never touch.
+func buildRouter(
+	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool,
+) (http.Handler, error) {
 	r := chi.NewRouter()
 	// No RealIP: it is vulnerable to spoofing (it trusts X-Forwarded-For /
 	// X-Real-IP whether or not your infrastructure sets them). When rate
@@ -241,7 +259,7 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		PathStyle: cfg.S3PathStyle,
 	})
 	if err != nil {
-		return fmt.Errorf("object storage: %w", err)
+		return nil, fmt.Errorf("object storage: %w", err)
 	}
 	engagementSvc := engagement.New(pool, log)
 	profileH := profile.NewHandler(
@@ -302,11 +320,18 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 
 	// Trace real requests, not health probes — kubelet polling would otherwise
 	// dominate the trace volume and tell you nothing.
-	handler := otelhttp.NewHandler(r, "http",
+	return otelhttp.NewHandler(r, "http",
 		otelhttp.WithFilter(func(req *http.Request) bool {
 			return req.URL.Path != "/healthz" && req.URL.Path != "/readyz"
 		}),
-	)
+	), nil
+}
+
+func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
+	handler, err := buildRouter(ctx, cfg, log, pool)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,
@@ -1079,5 +1104,72 @@ func sloReport(ctx context.Context, pool *pgxpool.Pool) error {
 	if len(breached) > 0 {
 		return fmt.Errorf("%d objective(s) breached", len(breached))
 	}
+	return nil
+}
+
+// loadTest drives the real API under load and checks the objectives.
+//
+// Blueprint §35 step 21 calls this "a test that can fail", so it exits non-zero
+// when an objective is breached. A load test that only prints numbers is a
+// benchmark, and a benchmark never tells you to stop.
+func loadTest(
+	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, f flags,
+) error {
+	// The REAL router, in process. A load test against a hand-built handler
+	// measures the hand-built handler.
+	handler, err := buildRouter(ctx, cfg, log, pool)
+	if err != nil {
+		return err
+	}
+
+	lc := loadtest.Config{
+		Users:       f.users,
+		Concurrency: f.concurrency,
+		Duration:    f.duration,
+	}
+	res, err := loadtest.NewDriver(pool, handler, log).Run(ctx, lc)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("load test: %d users, %d concurrent, %s per phase, %d postings in the corpus\n\n",
+		res.Config.Users, res.Config.Concurrency, res.Config.Duration, res.CorpusSize)
+
+	fmt.Println("cold (first request per user, nothing cached):")
+	fmt.Println(res.Cold)
+	fmt.Println("\nwarm (repeat requests, fit scores cached):")
+	fmt.Println(res.Warm)
+
+	fmt.Println("\nagainst the objectives:")
+	var breached int
+	for _, v := range res.Verdicts {
+		mark := "  ok  "
+		switch v.Status {
+		case slo.StatusBreached:
+			mark = " MISS "
+			breached++
+		case slo.StatusAtRisk:
+			mark = " risk "
+		case slo.StatusNoData:
+			mark = "  --  "
+		}
+		fmt.Printf("  [%s] %-38s %s\n", mark,
+			truncate(v.Objective.Description, 38), v.Detail)
+	}
+
+	// The corpus caveat travels with the result. A p95 measured against a few
+	// hundred postings says nothing about the blueprint's 200-500K, and a load
+	// test that omits that is a number people will quote later.
+	if res.CorpusSize < 10_000 {
+		fmt.Printf("\nNOTE: %d postings is far below the blueprint's 200-500K target corpus.\n"+
+			"These latencies are a floor, not a prediction: retrieval cost grows with\n"+
+			"the eligible set, and the vector index is not even chosen by the planner\n"+
+			"at this size.\n", res.CorpusSize)
+	}
+
+	if breached > 0 {
+		return fmt.Errorf("%d objective(s) breached under load", breached)
+	}
+	fmt.Println("\nall measured objectives met")
 	return nil
 }

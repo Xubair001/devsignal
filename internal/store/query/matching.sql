@@ -104,3 +104,42 @@ SELECT f.score, f.max_possible, f.factors, f.weights_version,
    AND f.opportunity_version = o.version
  ORDER BY f.computed_at DESC
  LIMIT 1;
+
+
+-- name: PutFitScoreBatch :batchexec
+-- The batched form of PutFitScore.
+--
+-- :batchexec makes sqlc emit a pgx.Batch, which pipelines every statement into
+-- ONE network round trip. The per-candidate version was an N+1 write: a feed
+-- request over 188 candidates issued 188 INSERTs, one round trip each, and the
+-- load test measured 842ms for a single request. Nothing about the SQL changes —
+-- only how many times we wait for the network.
+INSERT INTO fit_score (
+    user_id, opportunity_id, weights_version, profile_version,
+    opportunity_version, embedding_version, score, max_possible, factors
+) VALUES (
+    sqlc.arg(user_id), sqlc.arg(opportunity_id), sqlc.arg(weights_version),
+    sqlc.arg(profile_version), sqlc.arg(opportunity_version),
+    sqlc.arg(embedding_version), sqlc.arg(score), sqlc.arg(max_possible),
+    sqlc.arg(factors)
+)
+ON CONFLICT (user_id, opportunity_id, weights_version, profile_version,
+             opportunity_version, embedding_version)
+DO UPDATE SET score = excluded.score,
+              max_possible = excluded.max_possible,
+              factors = excluded.factors,
+              computed_at = now();
+
+-- name: PutEligibilityResultBatch :batchexec
+-- The same batching for the eligibility audit trail.
+INSERT INTO eligibility_result (
+    user_id, opportunity_id, profile_version, opportunity_version,
+    eligible, failed_checks
+) VALUES (
+    sqlc.arg(user_id), sqlc.arg(opportunity_id), sqlc.arg(profile_version),
+    sqlc.arg(opportunity_version), sqlc.arg(eligible), sqlc.arg(failed_checks)
+)
+ON CONFLICT (user_id, opportunity_id, profile_version, opportunity_version)
+DO UPDATE SET eligible = excluded.eligible,
+              failed_checks = excluded.failed_checks,
+              evaluated_at = now();

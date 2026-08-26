@@ -7,15 +7,15 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–17, 19 and 20 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–17 and 19–21 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
 embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
 score and its explanation, the evaluation harness that gates every scoring change, and the
 feed with saves, applications and dismiss-with-reason, and the admin console with quarantine,
-merge tools and the purge drill, and the SLOs with error budgets and burn-rate alerts. It
-ingests real postings from multiple boards:
+merge tools and the purge drill, the SLOs with error budgets and burn-rate alerts, and the load
+test that measures them. It ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -47,9 +47,14 @@ cron entry is a working alert with no metrics pipeline. `GET /internal/admin/slo
 same as JSON. Five of the twelve objectives report **unmeasurable with the reason attached**
 rather than green — see [docs/SLO.md](docs/SLO.md) for the alert rules and why that matters.
 
+`make loadtest` drives the real router in-process and exits non-zero on a breach. Measured: the
+feed meets its objectives to ~16 concurrent requests, peaking near 140 req/s over 288 postings.
+The bottleneck is per-request CPU proportional to the CANDIDATE count, not the connection pool —
+quadrupling the pool changed nothing.
+
 Next: step 18 is the daily digest, which needs the email decisions in
-[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 21 (load test) needs a
-metrics backend to read percentiles from. The frontend is unblocked — see
+[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 22 (calibration) needs
+outcome data the engagement log is now collecting. The frontend is unblocked — see
 [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
 
 Extraction runs against a `Provider` interface, so the model is a config value
@@ -365,6 +370,7 @@ make eval                  # NDCG@10 / Precision@7 / coverage. Gates scoring cha
 make test-integration      # provisions a disposable database, then runs the suite
 make check-erasure         # asserts a deleted identifier appears nowhere
 ./bin/devsignal --role=slo  # every objective against its target; exits non-zero on a breach
+make loadtest              # drives the real API and checks the latency objectives
 ```
 
 The integration suite is destructive — the queue tests claim and advance rows table-wide,
