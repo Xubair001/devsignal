@@ -249,7 +249,10 @@ func buildRouter(
 	authSvc := auth.NewService(pool, log, auth.DefaultPolicy(), nil)
 	authH := auth.NewHandler(authSvc, log)
 
-	oppH := opportunity.NewHandler(opportunity.NewService(pool, nil), log)
+	// One instance, shared: the feed and the browse list must answer with the
+	// same posting fields, and two services would be two places to forget one.
+	oppSvc := opportunity.NewService(pool, nil)
+	oppH := opportunity.NewHandler(oppSvc, log)
 
 	// Object storage is required for resumes. Failing at startup is correct: an
 	// API that accepts an upload it cannot store would lose user data silently.
@@ -268,7 +271,7 @@ func buildRouter(
 		log)
 
 	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
-	feedH := engagement.NewHandler(matcher, engagementSvc, log)
+	feedH := engagement.NewHandler(matcher, engagementSvc, oppSvc, log)
 	adminH := admin.NewHandler(admin.New(pool, log), log)
 	sloH := admin.NewSLOHandler(pool, log)
 

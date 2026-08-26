@@ -15,6 +15,12 @@ S3_ACCESS_KEY ?= devsignal
 S3_SECRET_KEY ?= devsignal123
 BIN    := bin/devsignal
 
+# Explicit package list rather than ./... — an npm dependency under
+# web/node_modules ships its own Go package (flatted vendors one), and ./...
+# compiles and tests it. Naming our trees keeps third-party Go out of vet,
+# lint and the race suite.
+GO_PKGS := ./cmd/... ./internal/... ./pkg/...
+
 .PHONY: help
 help: ## show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -97,16 +103,16 @@ fmt: ## gofmt
 
 .PHONY: vet
 vet: ## go vet
-	go vet ./...
+	go vet $(GO_PKGS)
 
 .PHONY: lint
 lint: ## golangci-lint + staticcheck
-	golangci-lint run ./...
-	staticcheck ./...
+	golangci-lint run $(GO_PKGS)
+	staticcheck $(GO_PKGS)
 
 .PHONY: test
 test: ## unit tests with the race detector
-	go test -race -count=1 ./...
+	go test -race -count=1 $(GO_PKGS)
 
 .PHONY: check
 check: fmt vet lint test ## everything that must pass before a commit
@@ -138,7 +144,7 @@ test-db: ## (re)create the disposable integration database
 test-integration: test-db ## integration tests against a disposable database (needs make up)
 	DATABASE_URL="$(DB_TEST_URL)" S3_ENDPOINT="$(S3_ENDPOINT)" \
 	S3_ACCESS_KEY="$(S3_ACCESS_KEY)" S3_SECRET_KEY="$(S3_SECRET_KEY)" \
-	go test -tags integration -count=1 -timeout 300s -p 1 ./...
+	go test -tags integration -count=1 -timeout 300s -p 1 $(GO_PKGS)
 
 .PHONY: eval
 eval: test-db ## ranking evaluation harness — gates scoring changes

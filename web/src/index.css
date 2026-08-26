@@ -1,0 +1,171 @@
+@import 'tailwindcss';
+
+/* ============================================================================
+   Design tokens.
+
+   Light is defined on bare :root so the un-stamped "system" state resolves.
+   Dark is redefined twice — once behind prefers-color-scheme (guarded so an
+   explicit light choice beats a dark OS) and once behind [data-theme='dark'] so
+   the toggle wins in both directions. No colour is ever declared only inside a
+   media query or attribute block, which is the classic unreadable-theme bug.
+   ========================================================================= */
+@theme {
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ground: #f8fafc;
+  --color-surface: #ffffff;
+  --color-raised: #f1f5f9;
+  --color-hover: #f8fafc;
+  --color-line: rgb(15 23 42 / 0.09);
+  --color-line-strong: rgb(15 23 42 / 0.14);
+  --color-ink: #0f172a;
+  --color-ink-2: #475569;
+  --color-ink-3: #94a3b8;
+
+  --color-brand: #6366f1;
+  --color-brand-ink: #4f46e5;
+  --color-brand-wash: rgb(99 102 241 / 0.09);
+
+  --color-good: #059669;
+  --color-good-wash: rgb(16 185 129 / 0.11);
+  --color-warn: #b45309;
+  --color-warn-wash: rgb(245 158 11 / 0.13);
+  --color-bad: #dc2626;
+  --color-bad-wash: rgb(239 68 68 / 0.1);
+
+  /* Unmeasurable is deliberately NOT a severity colour — it reads as absent. */
+  --color-null: #64748b;
+  --color-null-wash: rgb(100 116 139 / 0.09);
+
+  --color-glass: rgb(255 255 255 / 0.72);
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-raise: 0 2px 4px rgb(15 23 42 / 0.04), 0 8px 16px -4px rgb(15 23 42 / 0.08);
+  --shadow-float: 0 4px 8px rgb(15 23 42 / 0.04), 0 24px 48px -12px rgb(15 23 42 / 0.18);
+
+  --ease-out-quart: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-ground: #090d16;
+    --color-surface: #121826;
+    --color-raised: #171f30;
+    --color-hover: #18202f;
+    --color-line: rgb(255 255 255 / 0.08);
+    --color-line-strong: rgb(255 255 255 / 0.14);
+    --color-ink: #fafafa;
+    --color-ink-2: #94a3b8;
+    --color-ink-3: #64748b;
+
+    --color-brand: #818cf8;
+    --color-brand-ink: #a5b4fc;
+    --color-brand-wash: rgb(129 140 248 / 0.13);
+
+    --color-good: #34d399;
+    --color-good-wash: rgb(16 185 129 / 0.13);
+    --color-warn: #fbbf24;
+    --color-warn-wash: rgb(245 158 11 / 0.13);
+    --color-bad: #f87171;
+    --color-bad-wash: rgb(239 68 68 / 0.13);
+    --color-null: #64748b;
+    --color-null-wash: rgb(100 116 139 / 0.13);
+
+    --color-glass: rgb(9 13 22 / 0.72);
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+    --shadow-raise: 0 2px 6px rgb(0 0 0 / 0.4), 0 12px 24px -8px rgb(0 0 0 / 0.5);
+    --shadow-float: 0 4px 10px rgb(0 0 0 / 0.45), 0 28px 56px -12px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-ground: #090d16;
+  --color-surface: #121826;
+  --color-raised: #171f30;
+  --color-hover: #18202f;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.14);
+  --color-ink: #fafafa;
+  --color-ink-2: #94a3b8;
+  --color-ink-3: #64748b;
+
+  --color-brand: #818cf8;
+  --color-brand-ink: #a5b4fc;
+  --color-brand-wash: rgb(129 140 248 / 0.13);
+
+  --color-good: #34d399;
+  --color-good-wash: rgb(16 185 129 / 0.13);
+  --color-warn: #fbbf24;
+  --color-warn-wash: rgb(245 158 11 / 0.13);
+  --color-bad: #f87171;
+  --color-bad-wash: rgb(239 68 68 / 0.13);
+  --color-null: #64748b;
+  --color-null-wash: rgb(100 116 139 / 0.13);
+
+  --color-glass: rgb(9 13 22 / 0.72);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-raise: 0 2px 6px rgb(0 0 0 / 0.4), 0 12px 24px -8px rgb(0 0 0 / 0.5);
+  --shadow-float: 0 4px 10px rgb(0 0 0 / 0.45), 0 28px 56px -12px rgb(0 0 0 / 0.7);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    /* Explicit background from a token: a transparent body borrows the host's
+       ground and renders one theme's text on the other theme's surface. */
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 0.3s var(--ease-out-quart),
+      color 0.3s var(--ease-out-quart);
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.017em;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--color-brand-wash);
+  }
+}
+
+@layer utilities {
+  .glass {
+    background-color: var(--color-glass);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .no-bar {
+    scrollbar-width: none;
+  }
+  .no-bar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

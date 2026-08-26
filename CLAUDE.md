@@ -52,10 +52,20 @@ feed meets its objectives to ~16 concurrent requests, peaking near 140 req/s ove
 The bottleneck is per-request CPU proportional to the CANDIDATE count, not the connection pool —
 quadrupling the pool changed nothing.
 
+The console front end is built, in [`web/`](web/) — React + TypeScript + Vite, TanStack Query,
+Tailwind v4, four routes (overview, feed, sources, flags). Its binding display rules and the
+reasoning behind them are in [web/README.md](web/README.md); the settled framework decision is in
+[docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md), which previously recommended SvelteKit and was
+wrong — the checked-in `frontend-conventions` skill already specified React.
+
+Building it found a real gap rather than confirming the API: the feed returned a ranking with no
+posting attached, so a card had no company, salary, apply link or liveness — the product's central
+claim. See hard rule 27. The feed DTO now embeds `opportunity.Summary`, shared with the browse list
+so the two cannot drift.
+
 Next: step 18 is the daily digest, which needs the email decisions in
 [docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 22 (calibration) needs
-outcome data the engagement log is now collecting. The frontend is unblocked — see
-[docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
+outcome data the engagement log is now collecting.
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -129,6 +139,8 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `pkg/` | logger, telemetry, middleware, clients. Nothing domain-specific |
 | `migrations/` | golang-migrate. Never hand-write DDL outside a migration |
 | `testdata/` | Recorded source payloads (golden files). The highest-value tests in the repo |
+| `internal/apicontract/` | Reflection test over the json paths the console reads. Catches a renamed tag, which neither compiler can |
+| `web/` | The console: React + TS + Vite, TanStack Query, Tailwind v4. Display rules in `web/README.md` |
 | `docs/` | The blueprint, ADRs, runbooks |
 
 No `proto/` and no per-service repos until a blueprint §36 trigger fires.
@@ -265,6 +277,16 @@ blueprint's audit found.
     product's central claim to measurable, since that means finding ground truth or starting to
     guess. This is hard rule 3 applied to ourselves.
 
+27. **A feed item carries the posting, and the posting is not optional.** The daily feed may not
+    show a role whose open state is unknown, so `FeedItem.Posting` is a value, never a pointer and
+    never `omitempty` — the handler drops an item it cannot describe rather than sending a partial
+    one. This was wrong for the whole of step 17: the matcher returned a ranking and nothing
+    carried the posting, so a card had no company, no salary, no apply link and no way to say
+    "verified open". Because the client's DTOs are hand-written, neither compiler noticed.
+    `internal/apicontract` is the guard: a reflection test over every json path the console reads,
+    which fails on a rename. Fetch the postings for the page, not for the candidate set —
+    loading 188 rows to render 7 cost 40 ms of the cold p95.
+
 ## The two numbers
 
 The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
@@ -371,6 +393,15 @@ make test-integration      # provisions a disposable database, then runs the sui
 make check-erasure         # asserts a deleted identifier appears nowhere
 ./bin/devsignal --role=slo  # every objective against its target; exits non-zero on a breach
 make loadtest              # drives the real API and checks the latency objectives
+```
+
+The Go targets name `./cmd/... ./internal/... ./pkg/...` rather than `./...` on purpose: an npm
+dependency under `web/node_modules` ships its own Go package, and `./...` compiles and tests it.
+
+For the console, `npm run build` runs `tsc -b` first, so a type error fails the build:
+
+```bash
+cd web && npm install && npm run dev   # :5173, proxies /api and /internal to :8080
 ```
 
 The integration suite is destructive — the queue tests claim and advance rows table-wide,

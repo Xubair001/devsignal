@@ -136,3 +136,32 @@ jobs:
           psql "$DATABASE_URL" -c "\dt"
           psql "$DATABASE_URL" -tAc \
             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';"
+
+  # A separate job, not another step: the console needs no database, no object
+  # storage and no Go toolchain, so pinning it behind twenty minutes of backend
+  # setup would delay the fastest failure in the repo. It runs in parallel.
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # `ci`, not `install`: it installs exactly the lockfile and fails if
+      # package.json and the lock have drifted, which is the whole point of
+      # committing a lockfile.
+      - run: npm ci
+
+      # `tsc -b` is the real gate. The display rules are enforced by types as
+      # much as by review — `salary: Money | null` is what makes
+      # `salary || 'Competitive'` fail to compile rather than ship an invented
+      # field — so a type error here is a product bug, not a nit.
+      - name: typecheck and build
+        run: npm run build

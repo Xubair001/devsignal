@@ -168,8 +168,13 @@ SELECT o.id, o.title_raw, o.role_family, o.seniority_ordinal, o.is_management,
         OR o.remote_geo_scope LIKE '%' || $3::text || '%')
    AND ($4::timestamptz IS NULL
         OR (o.first_seen_at, o.id) < ($4::timestamptz, $5::uuid))
+   -- The feed already knows which ids it wants and in what order, so it passes
+   -- them here rather than through a second query with a parallel row type.
+   -- One column list means one mapping function, and a field added for the
+   -- browse list cannot go missing from the feed.
+   AND ($6::uuid[] IS NULL OR o.id = ANY($6::uuid[]))
  ORDER BY o.first_seen_at DESC, o.id DESC
- LIMIT $6::int
+ LIMIT $7::int
 `
 
 type ListOpportunitiesParams struct {
@@ -178,6 +183,7 @@ type ListOpportunitiesParams struct {
 	Country    *string
 	AfterSeen  pgtype.Timestamptz
 	AfterID    pgtype.UUID
+	Ids        []pgtype.UUID
 	PageSize   int32
 }
 
@@ -221,6 +227,7 @@ func (q *Queries) ListOpportunities(ctx context.Context, arg ListOpportunitiesPa
 		arg.Country,
 		arg.AfterSeen,
 		arg.AfterID,
+		arg.Ids,
 		arg.PageSize,
 	)
 	if err != nil {

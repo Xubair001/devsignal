@@ -28,6 +28,11 @@ SELECT o.id, o.title_raw, o.role_family, o.seniority_ordinal, o.is_management,
         OR o.remote_geo_scope LIKE '%' || sqlc.narg(country)::text || '%')
    AND (sqlc.narg(after_seen)::timestamptz IS NULL
         OR (o.first_seen_at, o.id) < (sqlc.narg(after_seen)::timestamptz, sqlc.narg(after_id)::uuid))
+   -- The feed already knows which ids it wants and in what order, so it passes
+   -- them here rather than through a second query with a parallel row type.
+   -- One column list means one mapping function, and a field added for the
+   -- browse list cannot go missing from the feed.
+   AND (sqlc.narg(ids)::uuid[] IS NULL OR o.id = ANY(sqlc.narg(ids)::uuid[]))
  ORDER BY o.first_seen_at DESC, o.id DESC
  LIMIT sqlc.arg(page_size)::int;
 

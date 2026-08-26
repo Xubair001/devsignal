@@ -26,3 +26,13 @@ vendor/
 # claude local overrides (settings.json IS committed)
 .claude/settings.local.json
 .claude/worktrees/
+
+# Frontend. node_modules must never be committed, and it matters more here than
+# usual: some npm packages ship Go source (flatted vendors a package under
+# golang/), so a committed node_modules would put third-party Go into our build
+# graph. GO_PKGS in the Makefile is the second half of that guard.
+web/node_modules/
+web/dist/
+web/.vite/
+web/*.local
+web/*.tsbuildinfo

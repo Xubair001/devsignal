@@ -152,44 +152,79 @@ turns the product into a job board with extra steps. The feed is the differentia
 
 ---
 
-## Framework choice — open, with a recommendation
+## Framework choice — settled
 
-Not decided, and nothing in the backend constrains it: the API is plain JSON over HTTP with
-cookie/bearer sessions, so anything works.
+**React 19 + TypeScript + Vite, TanStack Query for server state, React Router, Tailwind v4.
+Built, in [`web/`](../web/).**
 
-**Recommendation: SvelteKit or Next.js, TypeScript, server-side rendering, no component library.**
+This corrects an earlier version of this document, which recommended SvelteKit or Next.js with
+server-side rendering. That recommendation was written without checking the repo: the
+`frontend-conventions` skill in `.claude/skills/` already specified React + TypeScript + Vite +
+TanStack Query, on the grounds that it matches the `tenders.scraping` admin dashboard so
+conventions transfer. A checked-in convention beats a fresh opinion, and the skill also says
+explicitly: *"If you want Nuxt/Vue instead, raise it before building out; do not mix."*
 
-The reasoning, in the same spirit as the rest of the stack:
+Two things from the old recommendation were right and are kept:
 
-- **Server-side rendering** because the feed is personalized and slow-ish to compute (retrieval plus
-  scoring), and you want the shell rendered before that returns. It also keeps the session token out
-  of client-side JavaScript.
-- **No component library** for the feed card specifically. The card is the product, its honesty
-  rules are unusual, and a design-system card component will fight every one of them — starting with
-  "put the score in a circular progress ring", which is exactly the bare percentage that is
-  forbidden. Use one for forms and tables if you like.
-- **TypeScript** with types generated from the API rather than hand-written, so a field the backend
-  removes becomes a compile error rather than an `undefined` on a card.
+- **No component library for the feed card.** The card is the product, its honesty rules are
+  unusual, and a design-system card will fight every one of them — starting with "put the score in
+  a circular progress ring", which is exactly the bare percentage blueprint §3 forbids.
+  `FitLedger` renders `+15 of 15` rows instead, and there is no ring anywhere in `web/`.
+- **TypeScript at the boundary.** The DTOs in `web/src/lib/api/types.ts` mirror the Go response
+  types by hand.
 
-If you would rather not run a second toolchain at all, Go templates plus a little HTMX would serve
-these five screens honestly and deploy inside the existing binary. It is a smaller and duller choice
-and it is not wrong.
+### Two places this consciously departs from the old plan
 
-**What to avoid:** a client-side-only SPA that fetches the feed after mount. It puts the slowest
-call after the slowest paint and shows an empty state to every first-time visitor.
+**Hand-written DTOs, not generated.** The old text wanted types generated from the API "so a field
+the backend removes becomes a compile error". The goal is right; generation is the wrong instrument
+here, because a generated client flattens exactly the parts the display rules depend on —
+`salary: null` has to stay distinguishable from absent, and `scored: false` on a factor has to stay
+distinguishable from `points: 0`. What replaced it is `internal/apicontract`: a reflection test
+listing every json path the console reads, which fails if one is renamed or removed. It needs no
+database and runs on every `make test`. Verified by renaming `verified_open` and watching it fail.
+
+**A client-rendered SPA, which the old text warned against.** The warning was that it "puts the
+slowest call after the slowest paint and shows an empty state to every first-time visitor". Worth
+answering rather than ignoring:
+
+- The feed is not slow at present. Measured p95 is 75 ms warm and 129 ms cold (`make loadtest`,
+  288 postings). SSR would be hiding a fifth of a second.
+- Nothing renders an empty state while loading. Every list has four designed states, and the
+  loading one is a skeleton that holds the card's layout, so there is no shift when data lands.
+- The first audience is the operations console, which is authenticated and internal. The
+  latency-to-first-paint argument is a public-marketing-page argument.
+
+The warning becomes correct again in two specific circumstances, and it is worth writing down now
+rather than rediscovering it: when the feed is public and unauthenticated, and when retrieval cost
+grows with a realistic corpus. `SLO.md` already records that feed cost tracks the size of the
+eligible set rather than the page size, so this is a *when*, not an *if*. The migration path is
+narrow on purpose — the app is route-split and all server state goes through TanStack Query, so
+adding a server-rendered shell later does not mean a rewrite.
+
+### What is built
+
+| Route | What it is |
+|---|---|
+| `/` | Overview: SLO objectives ordered by attention, pipeline state, liveness recency |
+| `/feed` | The feed with the fit ledger, save/apply, and dismiss-with-reason |
+| `/sources` | Source table with yield, quarantine and purge, URL-backed sort and page |
+| `/flags` | The flag queue with uphold/reject |
+
+The design system, the theme handling and the honesty rules are documented in
+[`web/README.md`](../web/README.md).
 
 ---
 
 ## Remaining backend work
 
-Steps 2–17 of blueprint §35 are done. What is left, and what each actually depends on:
+Steps 2–17 of blueprint §35 are done, as are 19, 20 and 21. What is left, and what each actually depends on:
 
 | # | Step | Status | Blocked on |
 |---|------|--------|-----------|
 | 18 | Daily digest, budget, quiet hours | not started | email consent + sending domain ([OPEN-DECISIONS](OPEN-DECISIONS.md)) |
-| 19 | Admin console, quarantine, merge tools, purge drill | not started | nothing — the backing services all exist |
-| 20 | SLOs, dashboards, error-budget alerts | not started | nothing |
-| 21 | Load test against the SLOs | not started | 20 |
+| 19 | Admin console, quarantine, merge tools, purge drill | **done** | — |
+| 20 | SLOs, dashboards, error-budget alerts | **done** — see [SLO.md](SLO.md) | — |
+| 21 | Load test against the SLOs | **done** — `make loadtest` | — |
 | 22 | Calibration + percentile display | not started | **outcome data**, which step 17 has just started collecting |
 | 23 | Postgres queue → NATS JetStream | earned migration | a §36 trigger, measured |
 | 24 | Postgres FTS → OpenSearch | earned migration | a §36 trigger, measured |
