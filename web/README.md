@@ -11,9 +11,24 @@ npm run build      # tsc -b && vite build
 npx tsc -b --noEmit
 ```
 
-Point it at a backend with `VITE_API_BASE`, or leave it unset and let the Vite proxy handle it —
-see `.env.example`. The API needs a session; the console reads the bearer token from
-`localStorage['ds-token']`.
+Both ports are off the defaults, for the same reason the Postgres and Redis ports are: this
+machine already runs other projects on 5173 and 8080. Override with `DEVSIGNAL_WEB_PORT` and
+`DEVSIGNAL_API_URL`.
+
+### Authentication
+
+The API accepts `Authorization: Bearer <session token>` and nothing else. The console sends the
+token from `localStorage['ds-token']`, falling back to `VITE_DEV_TOKEN` when storage is empty.
+
+A header rather than a cookie, deliberately. Matching the client to the API by adding cookie auth
+would bring a CSRF surface with it: browsers attach cookies to cross-site requests automatically,
+and this console issues state-changing POSTs — save, apply, dismiss, quarantine, purge. A token
+read from storage is never sent by anyone but us, so there is nothing to forge and no CSRF token
+to get wrong.
+
+`VITE_DEV_TOKEN` goes in `web/.env.local` (gitignored) and must never be set in a deployed build:
+Vite inlines env values into the bundle. Mint one with a session row whose `token_hash` is the
+raw SHA-256 of the token — `bytea`, so `decode(…, 'hex')`, not the hex string itself.
 
 ## The five rules this UI exists to keep
 
