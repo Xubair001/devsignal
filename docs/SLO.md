@@ -9,7 +9,8 @@ breach; `GET /internal/admin/slo` serves the same thing as JSON.
 **An objective we cannot measure reports as `unmeasurable` with the reason
 attached — never as green.**
 
-Five of the twelve currently cannot be measured. A dashboard that shows green for
+Four of the twelve currently cannot be measured — five until step 18 landed;
+see "What changed at step 18" below. A dashboard that shows green for
 something nobody measured is worse than one with a visible gap: the gap prompts a
 question, the false green ends the conversation. It is the same rule the product
 applies to users (blueprint §3, hard rule 3), applied to ourselves.
@@ -27,7 +28,7 @@ applies to users (blueprint §3, hard rule 3), applied to ourselves.
 | Parse yield per source | ≥ 98% | 1 day | database, **per source** |
 | Dedup precision | > 99.5% | 30 days | **unmeasurable** — needs labelled pairs |
 | Extraction validity | > 99% | 1 day | database |
-| Digest generation | inside 30 min | 1 day | **unmeasurable** — digest is step 18 |
+| Digest generation | inside 30 min | 1 day | database, since step 18 |
 | Pipeline backlog | 0 records stranded > 1 h | 1 hour | database |
 | API availability | 99.5% | 30 days | metrics |
 
@@ -43,6 +44,14 @@ fiction we control. The report states the caveat inline every time.
 time, and an aggregate stays green while one source silently returns empty fields.
 That failure is what blueprint §29 calls the largest ongoing operational cost in
 the product.
+
+**Digest generation measures the SPREAD of a run, not one user's duration.**
+The objective is that everybody's digest is ready in time, so the number is
+first-user-start to last-user-finish on the most recent day that produced
+anything. It reports `no_data` rather than `met` when no run has happened: a
+0-second spread over zero users would clear a 30-minute target trivially, and an
+objective that goes green because the job never ran is the false green this
+document exists to prevent.
 
 **Liveness accuracy is not the same as verification recency.** Whether a role is
 genuinely open needs the employer's answer, which we do not have. What we can

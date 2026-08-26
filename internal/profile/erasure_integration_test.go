@@ -451,3 +451,96 @@ func TestErasureAnonymizesFlagsRatherThanDeletingThem(t *testing.T) {
 		t.Errorf("erasure incomplete: complete=%v traces=%d", rep.Complete, rep.TracesRemaining)
 	}
 }
+
+// TestErasureRemovesDigestDataAndCountsIt is hard rule 17 for step 18.
+//
+// Both tables cascade from app_user, so a naive test passes without them ever
+// being checked. The point of this one is the VERIFICATION path: if
+// notification_setting or digest_send is missing from CountUserTraces, the
+// erasure report says "0 traces remaining" while the data is still there — which
+// is the exact shape of a deletion promise that is not one.
+func TestErasureRemovesDigestDataAndCountsIt(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	svc := testService(t, pool)
+	userID, tenantID := newUser(t, pool)
+
+	q := store.New(pool)
+
+	// A DIFFERENTIAL check, one table at a time. An absolute threshold would pass
+	// on the strength of the profile and user rows alone, which is exactly how a
+	// missing table hides: the count is non-zero either way, and the assertion
+	// looks like it is testing something.
+	baseline, err := q.CountUserTraces(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO notification_setting (user_id, tenant_id, timezone,
+		    digest_enabled, digest_consent_at, digest_consent_wording_version)
+		VALUES ($1,$2,'Europe/London',true,now(),'test-v1')`,
+		userID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	withSettings, err := q.CountUserTraces(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withSettings != baseline+1 {
+		t.Fatalf("CountUserTraces went %d -> %d after adding a notification_setting; "+
+			"the erasure verification does not look at that table, so a leftover "+
+			"row would be reported as zero traces remaining", baseline, withSettings)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO digest_send (user_id, tenant_id, local_date,
+		    generation_started_at, generated_at, outcome, item_count, sender)
+		VALUES ($1,$2,current_date,now(),now(),'sent',3,'test')`,
+		userID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	withSend, err := q.CountUserTraces(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withSend != withSettings+1 {
+		t.Fatalf("CountUserTraces went %d -> %d after adding a digest_send; "+
+			"the erasure verification does not look at that table",
+			withSettings, withSend)
+	}
+
+	rep, err := svc.Erase(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Complete {
+		t.Error("erasure did not complete")
+	}
+	if rep.TracesRemaining != 0 {
+		t.Errorf("%d traces remain after erasure", rep.TracesRemaining)
+	}
+
+	for _, table := range []string{"notification_setting", "digest_send"} {
+		var n int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM `+table+` WHERE user_id=$1`, userID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s still holds %d rows for the erased user", table, n)
+		}
+	}
+
+	// Both locations must appear in the report, so an auditor reading it can see
+	// they were handled rather than inferring it from a total.
+	seen := map[string]bool{}
+	for _, st := range rep.Steps {
+		seen[st.Location] = true
+	}
+	for _, loc := range []string{LocNotificationSettings, LocDigestSends} {
+		if !seen[loc] {
+			t.Errorf("the erasure report does not mention %q", loc)
+		}
+	}
+}

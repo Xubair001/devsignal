@@ -61,7 +61,8 @@ func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
 			"spend | retrieve | match | eval | reindex-profiles | "+
-			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest")
+			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest | "+
+			"digest-optin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -72,12 +73,19 @@ func main() {
 	duration := flag.Duration("duration", 0, "per-phase duration (loadtest)")
 	recordBaseline := flag.Bool("record-baseline", false,
 		"eval: overwrite the committed baseline with this run (a reviewed act)")
+	dryRun := flag.Bool("dry-run", false,
+		"digest: compose and print, claim no day and send nothing")
+	timezone := flag.String("timezone", "UTC",
+		"digest-optin: the user's IANA timezone, e.g. Europe/London")
+	minBand := flag.String("min-band", "strong",
+		"digest-optin: minimum band to interrupt on (strong | worth_a_look)")
 	flag.Parse()
 
 	if err := run(*role, flags{
 		source: *srcName, file: *srcFile, reviewer: *reviewer, user: *userID,
 		email: *email, recordBaseline: *recordBaseline,
 		users: *users, concurrency: *concurrency, duration: *duration,
+		dryRun: *dryRun, timezone: *timezone, minBand: *minBand,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -98,6 +106,9 @@ type flags struct {
 	users          int
 	concurrency    int
 	duration       time.Duration
+	dryRun         bool
+	timezone       string
+	minBand        string
 }
 
 func run(role string, f flags) error {
@@ -173,7 +184,9 @@ func run(role string, f flags) error {
 	case "loadtest":
 		return loadTest(ctx, cfg, log, pool, f)
 	case "digest":
-		return fmt.Errorf("role %q is not implemented yet", role)
+		return digestRun(ctx, cfg, log, pool, f)
+	case "digest-optin":
+		return digestOptIn(ctx, cfg, log, pool, f)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
 	}

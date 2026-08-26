@@ -63,9 +63,21 @@ posting attached, so a card had no company, salary, apply link or liveness — t
 claim. See hard rule 27. The feed DTO now embeds `opportunity.Summary`, shared with the browse list
 so the two cannot drift.
 
-Next: step 18 is the daily digest, which needs the email decisions in
-[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 22 (calibration) needs
-outcome data the engagement log is now collecting.
+`--role=digest` is step 18. Everything blueprint §4.3 requires is built — a structural daily cap,
+a weekly cap, quiet hours in the user's own timezone, a minimum **band** to interrupt on, and the
+explicit empty case — with the transport behind a `Sender` interface. `DIGEST_SENDER=log` renders
+each digest to disk and delivers nothing, the same shape extraction uses with a fake provider, so
+only the last hop is unproven. Which provider actually sends is still open
+([docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) §3) and the default sender **fails** rather than
+silently dropping mail. `--role=digest-optin` records evidenced consent.
+
+Against the real corpus the digest correctly sends **nothing**: 188 roles are eligible and none
+reach "Strong fit", because coverage sits under 60% without extraction. That is the feature working
+— see hard rule 28.
+
+Next: step 22 (calibration) needs outcome data the engagement log is now collecting. Step 26
+(market intelligence) is blocked on a demand-series writer that **does not exist** — see
+[docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
 
 Extraction runs against a `Provider` interface, so the model is a config value
 (`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
@@ -94,7 +106,7 @@ recommendation and reasoning for each:
 |-----------|--------|--------|
 | Final Tier-A source list with per-source review | **settled** — three platforms built, rest reviewed | nothing |
 | Backup erasure approach | **recommended** — stated 35-day window over crypto-shredding | privacy notice wording |
-| Email consent basis and sending domain | **recommended** — SES + double opt-in, Resend in dev | first digest send (step 18) |
+| Email consent basis and sending domain | **recommended** — SES + double opt-in | real *delivery*; step 18's logic is built and verifiable without it |
 | EU AI Act classification for the recommender | **needs counsel** — not an engineering decision | EU launch, not development |
 
 ## Project (WHAT / WHY)
@@ -123,11 +135,11 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/pipeline/` | Work queue, state machine, sweeper, leases. The spine every worker plugs into |
 | `internal/opportunity/` | Canonical model, provenance, normalization, dedup, liveness |
 | `internal/company/` | Entity resolution on registrable domain, alias table |
-| `internal/skill/` | Ontology, aliases, edges, demand time-series writes |
+| `internal/skill/` | Ontology, aliases, edges, demand time-series writes. **Planned, not built** — the tables exist from migration 000004 and have no writer |
 | `internal/enrich/` | Extraction, embeddings, the content-hash cache, hot/cold lanes |
 | `internal/matching/` | Eligibility gate, retrieval, fit scoring, explanation |
 | `internal/engagement/` | Feed, saves, applications, dismissals |
-| `internal/digest/` | Notification budget, quiet hours, the empty case |
+| `internal/digest/` | Notification budget, quiet hours, the minimum band, the empty case. Transport behind a `Sender` interface |
 | `internal/auth/`, `internal/profile/` | Identity, sessions, tenancy, resume ingestion |
 | `internal/admin/` | Source health, merge/unmerge, quarantine, flag queue |
 | `internal/enrich/` | Extraction. The cache key is the determinism guarantee, not just a cost saving |
@@ -287,6 +299,19 @@ blueprint's audit found.
     which fails on a rename. Fetch the postings for the page, not for the candidate set —
     loading 188 rows to render 7 cost 40 ms of the cold p95.
 
+28. **The bar for interrupting someone is a BAND, and "Not enough information" clears none of
+    them.** The digest's minimum is `strong` or `worth_a_look`, never a numeric threshold: hard
+    rule 3 forbids treating an uncalibrated score as a probability, and that applies to our own
+    send decision as much as to anything rendered. `BandInsufficient` is not the bottom of a
+    ladder — it says we could observe less than 60% of the model — so treating it as a low score
+    would mean emailing people on the strength of data we admit we do not have, and doing it most
+    often exactly when extraction is broken. An unrecognized bar sends nothing rather than
+    everything: failing closed is the only safe direction for a rule about interrupting people.
+    A related pair: quiet hours **defer and write no row**, so the day stays claimable, while an
+    `empty` outcome writes a row that is **provisional** — ingestion runs all day and a Strong fit
+    appearing at 10:00 must still reach the user, so a later run upgrades that row in place. Only
+    `sent` is terminal, and the `outcome <> 'sent'` guard in the UPDATE is the daily cap.
+
 ## The two numbers
 
 The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
@@ -393,6 +418,7 @@ make test-integration      # provisions a disposable database, then runs the sui
 make check-erasure         # asserts a deleted identifier appears nowhere
 ./bin/devsignal --role=slo  # every objective against its target; exits non-zero on a breach
 make loadtest              # drives the real API and checks the latency objectives
+./bin/devsignal --role=digest --dry-run  # compose and print; claim no day, send nothing
 ```
 
 The Go targets name `./cmd/... ./internal/... ./pkg/...` rather than `./...` on purpose: an npm

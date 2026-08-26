@@ -217,11 +217,11 @@ The design system, the theme handling and the honesty rules are documented in
 
 ## Remaining backend work
 
-Steps 2–17 of blueprint §35 are done, as are 19, 20 and 21. What is left, and what each actually depends on:
+Steps 2–21 of blueprint §35 are done, with step 18's transport still open. What is left, and what each actually depends on:
 
 | # | Step | Status | Blocked on |
 |---|------|--------|-----------|
-| 18 | Daily digest, budget, quiet hours | not started | email consent + sending domain ([OPEN-DECISIONS](OPEN-DECISIONS.md)) |
+| 18 | Daily digest, budget, quiet hours | **done, except the transport** | a sending domain, for real delivery ([OPEN-DECISIONS](OPEN-DECISIONS.md)) |
 | 19 | Admin console, quarantine, merge tools, purge drill | **done** | — |
 | 20 | SLOs, dashboards, error-budget alerts | **done** — see [SLO.md](SLO.md) | — |
 | 21 | Load test against the SLOs | **done** — `make loadtest` | — |
@@ -229,7 +229,7 @@ Steps 2–17 of blueprint §35 are done, as are 19, 20 and 21. What is left, and
 | 23 | Postgres queue → NATS JetStream | earned migration | a §36 trigger, measured |
 | 24 | Postgres FTS → OpenSearch | earned migration | a §36 trigger, measured |
 | 25 | Compose → Kubernetes → AWS | earned migration | a §36 trigger, measured |
-| 26 | Market intelligence surfaces | not started | the demand time-series, collecting since step 8 |
+| 26 | Market intelligence surfaces | not started | a demand-series writer, which **does not exist** — see below |
 
 Also outstanding, and none of it is a numbered step:
 
@@ -244,6 +244,12 @@ Also outstanding, and none of it is a numbered step:
 - **Company entity resolution is deterministic-only.** Alias and fuzzy matching are unbuilt, and are
   never auto-merged.
 - **Backup erasure** is a stated recommendation, not a decision.
+- **The skill demand time-series has no writer.** `skill_demand_daily` was created by
+  migration 000004 and has never been written to; `skill`, `skill_alias` and `skill_edge` are
+  empty too. An earlier version of this table said the series had been "collecting since step 8",
+  which was wrong twice: step 8 was normalization and dedup, and nothing writes the table at all.
+  Step 26 is therefore blocked on two things, not one — a writer, and the extracted skills that
+  would populate it.
 
 ## What a frontend will immediately expose
 

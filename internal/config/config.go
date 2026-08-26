@@ -38,6 +38,15 @@ type Config struct {
 	AnthropicAPIKey string
 	ExtractionModel string
 
+	// DigestSender selects the email transport. Defaults to "none", which FAILS
+	// rather than silently dropping mail: which provider sends the digest is an
+	// open decision (docs/OPEN-DECISIONS.md §3), and a retention channel that
+	// reports success while delivering nothing is the failure hard rule 26 is
+	// about. "log" renders each digest to DigestLogDir and delivers nothing,
+	// which is how step 18 is verifiable without a provider.
+	DigestSender string
+	DigestLogDir string
+
 	OTelEnabled     bool
 	OTelExporter    string
 	OTelServiceName string
@@ -66,6 +75,8 @@ func Load() (*Config, error) {
 		ShutdownTimeout:  dur("SHUTDOWN_TIMEOUT", 30*time.Second),
 		AnthropicAPIKey:  str("ANTHROPIC_API_KEY", ""),
 		ExtractionModel:  str("EXTRACTION_MODEL", "claude-opus-5"),
+		DigestSender:     str("DIGEST_SENDER", "none"),
+		DigestLogDir:     str("DIGEST_LOG_DIR", "./tmp/digests"),
 		OTelEnabled:      boolean("OTEL_ENABLED", true),
 		OTelExporter:     str("OTEL_EXPORTER", "stdout"),
 		OTelServiceName:  str("OTEL_SERVICE_NAME", "devsignal"),

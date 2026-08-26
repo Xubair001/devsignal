@@ -75,6 +75,9 @@ func (e *Evaluator) evaluateOne(ctx context.Context, o Objective) ([]Result, err
 	case ExtractionValidity:
 		r, err := e.extractionValidity(ctx, o)
 		return []Result{r}, err
+	case DigestGeneration:
+		r, err := e.digestGeneration(ctx, o)
+		return []Result{r}, err
 	case FeedLatencyCached, FeedLatencyCold, APIAvailability:
 		// Measurable in principle and instrumented, but the numbers live in the
 		// metrics pipeline rather than the database. Saying no_data is honest;
@@ -161,6 +164,29 @@ func (e *Evaluator) extractionValidity(ctx context.Context, o Objective) (Result
 		// Both give a zero count and they need opposite responses.
 		r.Detail = "no extractions in the window; extraction may not be configured"
 	}
+	return r, nil
+}
+
+// digestGeneration measures the most recent run's spread.
+//
+// Reports no_data rather than met when no run has happened. A 0-second spread
+// over zero users would clear a 30-minute target trivially, and an objective
+// that goes green because the job never ran is worse than one with a visible
+// gap — the gap prompts a question, the false green ends the conversation.
+func (e *Evaluator) digestGeneration(ctx context.Context, o Objective) (Result, error) {
+	row, err := e.q.SLIDigestGeneration(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("slo: digest generation: %w", err)
+	}
+	if row.Users == 0 {
+		return Result{
+			Objective: o, Status: StatusNoData,
+			Detail: "no digest run has produced anything yet; the objective is " +
+				"measurable but there is nothing to measure",
+		}, nil
+	}
+	r := EvaluateDuration(o, intervalDuration(row.Spread), row.Users)
+	r.Detail += fmt.Sprintf(" across %d users in the most recent run", row.Users)
 	return r, nil
 }
 

@@ -146,9 +146,12 @@ var Objectives = []Objective{
 	{
 		ID: DigestGeneration, Description: "Digest generation inside a 30-minute window",
 		Kind: KindDuration, Target: float64(30 * time.Minute), Percentile: 100,
-		Window:     WindowDay,
-		Measurable: false,
-		Blocker:    "the digest is step 18 and is not built",
+		Window: WindowDay,
+		// Measurable since step 18. The number is the SPREAD of the most recent
+		// run — first user's start to last user's finish — because the objective is
+		// that everybody's digest is ready in time, and no single user's duration
+		// can express that.
+		Measurable: true,
 	},
 	{
 		ID: PipelineBacklog, Description: "No record in a non-terminal state over 1 hour",

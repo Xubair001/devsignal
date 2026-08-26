@@ -5,6 +5,8 @@
 package store
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector "github.com/pgvector/pgvector-go"
 )
@@ -66,6 +68,25 @@ type CompanyMerge struct {
 	MergedBy      string
 	MergedAt      pgtype.Timestamptz
 	UndoneAt      pgtype.Timestamptz
+}
+
+type DigestSend struct {
+	ID                  pgtype.UUID
+	UserID              pgtype.UUID
+	TenantID            pgtype.UUID
+	LocalDate           pgtype.Date
+	GenerationStartedAt pgtype.Timestamptz
+	GeneratedAt         pgtype.Timestamptz
+	SentAt              pgtype.Timestamptz
+	Outcome             string
+	Reason              *string
+	ItemCount           int32
+	OpportunityIds      []pgtype.UUID
+	WeightsVersion      *string
+	ProfileVersion      *int32
+	MinBand             *string
+	Sender              string
+	Attempts            int32
 }
 
 // Why a posting was excluded. User-derived: erasure deletes these.
@@ -151,6 +172,25 @@ type MergeCandidate struct {
 	ResolvedBy         *string
 	ResolvedAt         pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
+}
+
+type NotificationSetting struct {
+	UserID                      pgtype.UUID
+	TenantID                    pgtype.UUID
+	Timezone                    string
+	QuietStart                  int16
+	QuietEnd                    int16
+	DigestEnabled               bool
+	MaxPerWeek                  int16
+	MinBand                     string
+	SendWhenEmpty               bool
+	DigestConsentAt             pgtype.Timestamptz
+	DigestConsentWordingVersion *string
+	DigestConsentIp             *netip.Addr
+	DigestConsentWithdrawnAt    pgtype.Timestamptz
+	Version                     int32
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
 }
 
 type Opportunity struct {

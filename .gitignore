@@ -36,3 +36,7 @@ web/dist/
 web/.vite/
 web/*.local
 web/*.tsbuildinfo
+
+# Rendered digests from DIGEST_SENDER=log. These are real user-facing content
+# addressed to a real address, so they are development output, never artefacts.
+tmp/
