@@ -183,7 +183,7 @@ func (q *Queries) GetFitScores(ctx context.Context, arg GetFitScoresParams) ([]G
 }
 
 const getOpportunitiesForScoring = `-- name: GetOpportunitiesForScoring :many
-SELECT o.id, o.tenant_id, o.company_id, o.title_raw, o.title_normalized, o.role_family, o.seniority_ordinal, o.description_text, o.description_html_key, o.employment_type, o.work_mode, o.remote_geo_scope, o.remote_timezone_min, o.remote_timezone_max, o.location_country, o.location_region, o.location_city, o.location_lat, o.location_lon, o.location_timezone, o.language, o.salary_min_minor, o.salary_max_minor, o.salary_currency, o.salary_period, o.salary_is_estimated, o.fx_rate_date, o.visa_sponsorship, o.apply_method, o.ats_type, o.first_seen_at, o.last_seen_at, o.source_reported_posted_at, o.closed_at, o.close_reason, o.consecutive_misses, o.liveness_checked_at, o.pipeline_state, o.attempts, o.last_error, o.next_attempt_at, o.lease_until, o.version, o.quality_score, o.ghost_risk_score, o.content_hash, o.simhash, o.created_at, o.updated_at, o.state_entered_at, o.is_management, o.normalization_version, o.block_key, o.merged_into, o.swept_at, o.repost_count, o.source_posted_at_at_last_change, o.extraction_content_hash, o.enriched_at, o.extraction_error,
+SELECT o.id, o.tenant_id, o.company_id, o.title_raw, o.title_normalized, o.role_family, o.seniority_ordinal, o.description_text, o.description_html_key, o.employment_type, o.work_mode, o.remote_geo_scope, o.remote_timezone_min, o.remote_timezone_max, o.location_country, o.location_region, o.location_city, o.location_lat, o.location_lon, o.location_timezone, o.language, o.salary_min_minor, o.salary_max_minor, o.salary_currency, o.salary_period, o.salary_is_estimated, o.fx_rate_date, o.visa_sponsorship, o.apply_method, o.ats_type, o.first_seen_at, o.last_seen_at, o.source_reported_posted_at, o.closed_at, o.close_reason, o.consecutive_misses, o.liveness_checked_at, o.pipeline_state, o.attempts, o.last_error, o.next_attempt_at, o.lease_until, o.version, o.quality_score, o.ghost_risk_score, o.content_hash, o.simhash, o.created_at, o.updated_at, o.state_entered_at, o.is_management, o.normalization_version, o.block_key, o.merged_into, o.swept_at, o.repost_count, o.source_posted_at_at_last_change, o.extraction_content_hash, o.enriched_at, o.extraction_error, o.unmerged_at,
        (e.embedding <=> $1::vector)::double precision AS distance
   FROM opportunity o
   LEFT JOIN opportunity_embedding e
@@ -278,6 +278,7 @@ func (q *Queries) GetOpportunitiesForScoring(ctx context.Context, arg GetOpportu
 			&i.Opportunity.ExtractionContentHash,
 			&i.Opportunity.EnrichedAt,
 			&i.Opportunity.ExtractionError,
+			&i.Opportunity.UnmergedAt,
 			&i.Distance,
 		); err != nil {
 			return nil, err

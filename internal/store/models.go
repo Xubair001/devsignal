@@ -5,6 +5,8 @@
 package store
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector "github.com/pgvector/pgvector-go"
 )
@@ -21,6 +23,7 @@ type AppUser struct {
 	LastLoginAt     pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	Role            string
 }
 
 type AuditLog struct {
@@ -65,6 +68,25 @@ type CompanyMerge struct {
 	MergedBy      string
 	MergedAt      pgtype.Timestamptz
 	UndoneAt      pgtype.Timestamptz
+}
+
+type DigestSend struct {
+	ID                  pgtype.UUID
+	UserID              pgtype.UUID
+	TenantID            pgtype.UUID
+	LocalDate           pgtype.Date
+	GenerationStartedAt pgtype.Timestamptz
+	GeneratedAt         pgtype.Timestamptz
+	SentAt              pgtype.Timestamptz
+	Outcome             string
+	Reason              *string
+	ItemCount           int32
+	OpportunityIds      []pgtype.UUID
+	WeightsVersion      *string
+	ProfileVersion      *int32
+	MinBand             *string
+	Sender              string
+	Attempts            int32
 }
 
 // Why a posting was excluded. User-derived: erasure deletes these.
@@ -152,6 +174,25 @@ type MergeCandidate struct {
 	CreatedAt          pgtype.Timestamptz
 }
 
+type NotificationSetting struct {
+	UserID                      pgtype.UUID
+	TenantID                    pgtype.UUID
+	Timezone                    string
+	QuietStart                  int16
+	QuietEnd                    int16
+	DigestEnabled               bool
+	MaxPerWeek                  int16
+	MinBand                     string
+	SendWhenEmpty               bool
+	DigestConsentAt             pgtype.Timestamptz
+	DigestConsentWordingVersion *string
+	DigestConsentIp             *netip.Addr
+	DigestConsentWithdrawnAt    pgtype.Timestamptz
+	Version                     int32
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+}
+
 type Opportunity struct {
 	ID                     pgtype.UUID
 	TenantID               pgtype.UUID
@@ -214,6 +255,8 @@ type Opportunity struct {
 	ExtractionContentHash      []byte
 	EnrichedAt                 pgtype.Timestamptz
 	ExtractionError            *string
+	// Set when an administrator reversed a merge. Dedup never re-merges these: a human decision outranks a similarity score.
+	UnmergedAt pgtype.Timestamptz
 }
 
 type OpportunityEmbedding struct {
@@ -223,6 +266,20 @@ type OpportunityEmbedding struct {
 	EmbeddingDim     int32
 	Embedding        pgvector.Vector
 	CreatedAt        pgtype.Timestamptz
+}
+
+// User-reported listing problems with a review queue. reported_by is nullable so a flag survives the reporter's erasure.
+type OpportunityFlag struct {
+	ID             pgtype.UUID
+	OpportunityID  pgtype.UUID
+	ReportedBy     pgtype.UUID
+	Reason         string
+	Detail         *string
+	Status         string
+	ResolutionNote *string
+	ResolvedBy     pgtype.UUID
+	ResolvedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 type OpportunityMerge struct {
@@ -235,6 +292,8 @@ type OpportunityMerge struct {
 	MergedBy          string
 	MergedAt          pgtype.Timestamptz
 	UndoneAt          pgtype.Timestamptz
+	// The opportunity_source rows this merge moved. Null for merges recorded before the column existed; those cannot be reversed automatically.
+	MovedSourceIds []pgtype.UUID
 }
 
 type OpportunitySkill struct {

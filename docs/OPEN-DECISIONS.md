@@ -124,3 +124,22 @@ None of this blocks development. It blocks an **EU launch**, and the honest way 
 launch gate with a named owner, not as a technical unknown. The Digital Omnibus timeline moved the
 relevant deadline to **2 December 2027**, so there is room to get a real opinion rather than a rushed
 one.
+
+### What step 18 built without settling this
+
+Step 18 is done except the last hop. Everything blueprint §4.3 requires — the structural daily cap,
+the weekly cap, quiet hours in the user's own timezone, the minimum band, and the explicit empty
+case — is built and tested, with the transport behind a `Sender` interface.
+
+`DIGEST_SENDER=log` writes each rendered digest to `DIGEST_LOG_DIR` and delivers nothing, which is
+the same shape extraction uses with a fake model provider: a real interface with a real
+implementation behind it, so only the provider call is unproven. The default is `none`, which
+**fails loudly** rather than accepting a message and dropping it — a retention channel that reports
+success while delivering nothing is the failure hard rule 26 is about.
+
+What this decision still gates is real delivery to a real inbox, and one thing more: the consent
+wording. `--role=digest-optin` records an operator consent with wording version
+`operator-recorded-v1`, deliberately distinguishable from a genuine double opt-in, because there is
+no signup screen yet to show anyone the wording they would be agreeing to. Swapping in a provider
+is a `Sender` implementation and a config value. Swapping in real consent needs the wording, which
+needs the recommendation above to be accepted.

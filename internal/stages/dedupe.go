@@ -140,7 +140,7 @@ func (d *Deduper) merge(ctx context.Context, from, into pgtype.UUID, blockKey st
 	reason := string(v.Reason)
 	conf := v.Confidence
 
-	moved, err := q.MoveSourceRows(ctx, store.MoveSourceRowsParams{
+	movedIDs, err := q.MoveSourceRows(ctx, store.MoveSourceRowsParams{
 		IntoID: into, Reason: &reason, Confidence: &conf, FromID: from,
 	})
 	if err != nil {
@@ -161,8 +161,11 @@ func (d *Deduper) merge(ctx context.Context, from, into pgtype.UUID, blockKey st
 		IntoOpportunityID: into,
 		Reason:            reason,
 		Confidence:        &conf,
-		SourceRowsMoved:   int32(moved),
+		SourceRowsMoved:   int32(len(movedIDs)),
 		MergedBy:          "dedupe",
+		// The ids, not just the count. Without them the merge cannot be reversed,
+		// and hard rule 11 requires that it can be.
+		MovedSourceIds: movedIDs,
 	}); err != nil {
 		return fmt.Errorf("record merge: %w", err)
 	}
@@ -172,7 +175,7 @@ func (d *Deduper) merge(ctx context.Context, from, into pgtype.UUID, blockKey st
 	}
 	d.log.Info("merged duplicate",
 		"from", from.String(), "into", into.String(),
-		"reason", reason, "confidence", conf, "source_rows_moved", moved)
+		"reason", reason, "confidence", conf, "source_rows_moved", len(movedIDs))
 	return nil
 }
 
@@ -259,6 +262,14 @@ func (d *Deduper) sweepOne(ctx context.Context, blockKey string) (int, error) {
 		keeper := toCandidate(members[i])
 		for j := i + 1; j < len(members); j++ {
 			if gone[members[j].ID.String()] {
+				continue
+			}
+			// Defence in depth. The query no longer duplicates a posting, but a
+			// self-merge is caught by a CHECK constraint mid-transaction, and
+			// discovering it there means an error log and a rolled-back sweep
+			// rather than a skipped comparison. Cheap to assert, expensive to
+			// rediscover.
+			if members[j].ID == members[i].ID {
 				continue
 			}
 			other := toCandidate(members[j])

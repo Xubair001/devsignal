@@ -112,7 +112,7 @@ func (q *Queries) ClaimBatch(ctx context.Context, arg ClaimBatchParams) ([]Claim
 const createOpportunity = `-- name: CreateOpportunity :one
 INSERT INTO opportunity (company_id, title_raw, title_normalized, pipeline_state, content_hash)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at, repost_count, source_posted_at_at_last_change, extraction_content_hash, enriched_at, extraction_error
+RETURNING id, tenant_id, company_id, title_raw, title_normalized, role_family, seniority_ordinal, description_text, description_html_key, employment_type, work_mode, remote_geo_scope, remote_timezone_min, remote_timezone_max, location_country, location_region, location_city, location_lat, location_lon, location_timezone, language, salary_min_minor, salary_max_minor, salary_currency, salary_period, salary_is_estimated, fx_rate_date, visa_sponsorship, apply_method, ats_type, first_seen_at, last_seen_at, source_reported_posted_at, closed_at, close_reason, consecutive_misses, liveness_checked_at, pipeline_state, attempts, last_error, next_attempt_at, lease_until, version, quality_score, ghost_risk_score, content_hash, simhash, created_at, updated_at, state_entered_at, is_management, normalization_version, block_key, merged_into, swept_at, repost_count, source_posted_at_at_last_change, extraction_content_hash, enriched_at, extraction_error, unmerged_at
 `
 
 type CreateOpportunityParams struct {
@@ -193,6 +193,7 @@ func (q *Queries) CreateOpportunity(ctx context.Context, arg CreateOpportunityPa
 		&i.ExtractionContentHash,
 		&i.EnrichedAt,
 		&i.ExtractionError,
+		&i.UnmergedAt,
 	)
 	return i, err
 }

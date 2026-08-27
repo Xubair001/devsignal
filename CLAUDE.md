@@ -7,14 +7,15 @@ blueprint wins and this file is stale.
 
 ## Status
 
-**Blueprint §35 steps 2–17 are done.** Repo, CI, local stack, config/logging/tracing, canonical
+**Blueprint §35 steps 2–17 and 19–21 are done.** Repo, CI, local stack, config/logging/tracing, canonical
 schema, identity, the pipeline spine, the first source adapter, normalization + dedup, and the
 read API with liveness and ghost-risk signals, source-health monitoring, and the developer
 profile with resume ingestion and verified erasure, cached LLM extraction, and versioned
 embeddings with vector search, two-channel retrieval, and the eligibility gate with the fit
 score and its explanation, the evaluation harness that gates every scoring change, and the
-feed with saves, applications and dismiss-with-reason. It ingests real postings from multiple
-boards:
+feed with saves, applications and dismiss-with-reason, and the admin console with quarantine,
+merge tools and the purge drill, the SLOs with error budgets and burn-rate alerts, and the load
+test that measures them. It ingests real postings from multiple boards:
 `make add-source name=greenhouse:gitlab && make ingest name=greenhouse:gitlab`, or in bulk with
 `--role=add-sources --file=boards.txt --reviewed-by=you`. `--role=source-health` prints today
 against each source's own baseline.
@@ -34,15 +35,75 @@ quality. Behavioural labels replace the rubric at step 17.
 behavioural evaluation set that will replace the rubric labels, and the ranking decision record
 blueprint §32 requires. Nothing there updates or deletes — un-saving appends.
 
-Next: step 18 is the daily digest, which needs the email decisions in
-[docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) settled first. Step 19 (admin console) and the
-frontend are both unblocked — see [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
+`/internal/admin` is the operations surface: source health with a quarantine toggle, full
+provenance with a working un-merge, the merge-candidate and listing-flag review queues, re-run
+controls, and a source purge that counts before it deletes. Admin is a role on `app_user`,
+granted only from the binary (`--role=grant-admin --email=…`) so a compromised session cannot
+mint more admins. Every action lands in the hash-chained audit log in the same transaction as
+the change.
 
-Extraction runs against a `Provider` interface, so the model is a config value
-(`EXTRACTION_MODEL`, default `claude-opus-5`). No API key is set in this
-environment, so extraction has only ever run against a fake provider — the cache,
-validation and degrade paths are proven, but no live model call has been made.
-`--role=spend` reports what it costs once one is. Scaling past the two boards currently
+`--role=slo` prints every objective against its target and exits non-zero on a breach, so a
+cron entry is a working alert with no metrics pipeline. `GET /internal/admin/slo` serves the
+same as JSON. Five of the twelve objectives report **unmeasurable with the reason attached**
+rather than green — see [docs/SLO.md](docs/SLO.md) for the alert rules and why that matters.
+
+`make loadtest` drives the real router in-process and exits non-zero on a breach. Measured: the
+feed meets its objectives to ~16 concurrent requests, peaking near 140 req/s over 288 postings.
+The bottleneck is per-request CPU proportional to the CANDIDATE count, not the connection pool —
+quadrupling the pool changed nothing.
+
+The console front end is built, in [`web/`](web/) — React + TypeScript + Vite, TanStack Query,
+Tailwind v4, four routes (overview, feed, sources, flags). Its binding display rules and the
+reasoning behind them are in [web/README.md](web/README.md); the settled framework decision is in
+[docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md), which previously recommended SvelteKit and was
+wrong — the checked-in `frontend-conventions` skill already specified React.
+
+Building it found a real gap rather than confirming the API: the feed returned a ranking with no
+posting attached, so a card had no company, salary, apply link or liveness — the product's central
+claim. See hard rule 27. The feed DTO now embeds `opportunity.Summary`, shared with the browse list
+so the two cannot drift.
+
+`--role=digest` is step 18. Everything blueprint §4.3 requires is built — a structural daily cap,
+a weekly cap, quiet hours in the user's own timezone, a minimum **band** to interrupt on, and the
+explicit empty case — with the transport behind a `Sender` interface. `DIGEST_SENDER=log` renders
+each digest to disk and delivers nothing, the same shape extraction uses with a fake provider, so
+only the last hop is unproven. Which provider actually sends is still open
+([docs/OPEN-DECISIONS.md](docs/OPEN-DECISIONS.md) §3) and the default sender **fails** rather than
+silently dropping mail. `--role=digest-optin` records evidenced consent.
+
+Against the real corpus the digest correctly sends **nothing**: 188 roles are eligible and none
+reach "Strong fit", because coverage sits under 60% without extraction. That is the feature working
+— see hard rule 28.
+
+Next: step 22 (calibration) needs outcome data the engagement log is now collecting. Step 26
+(market intelligence) is blocked on a demand-series writer that **does not exist** — see
+[docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).
+
+Extraction runs against a `Provider` interface with **two implementations**:
+`anthropic` (SDK, prompt caching, schema-constrained output) and `openai` (raw HTTP per hard rule
+4, strict Structured Outputs). `enrich.Resolve` picks one — explicitly via `EXTRACTION_PROVIDER`,
+or inferred from whichever key is set. Two keys and no explicit choice is an **error**, not a
+precedence rule: which vendor read a posting is part of its cache key.
+
+**Extraction has now run live**, against OpenAI. The same `JSONSchema()` is accepted by OpenAI's
+strict mode unmodified, so there is one schema, not two. Two things were measured rather than
+assumed:
+
+- `gpt-5-mini` at `reasoning_effort=minimal` returned **12 skills in 280 output tokens and 5.2 s**.
+  At default effort the same posting cost **2,531 output tokens and 38 s** and returned **eleven**.
+  Extraction is mechanical reading; a reasoning budget bought a worse answer. Minimal is the default.
+- OpenAI caches prompt prefixes automatically only from 1024 tokens, which `Instructions` does not
+  reach. So the content-hash cache in `internal/enrich` — not the vendor's — is what makes
+  re-extraction free. Hard rule 8 is provider-neutral by design.
+
+`ModelID()` is vendor-qualified (`openai:gpt-5-mini`), because two vendors can ship the same model
+name and hard rule 8 makes that string the determinism guarantee. `--role=spend` reports cost per
+model id per lane.
+
+**The 45 skill points still do not score, and extraction was only half the blocker.** `profile_skill`
+has an upsert and a read but **no writer anywhere in the product** — resume ingestion extracts text,
+not skills. Posting skills now exist; the profile side is empty, and `required_skills` needs both.
+Extracting profile skills from resume text is the missing piece, and it is now possible. Scaling past the two boards currently
 registered is blocked on the Tier-A source list, not on code — `add-sources` takes a file.
 
 Erasure is real and `make check-erasure` proves it. The one part still open is BACKUPS: either
@@ -65,7 +126,7 @@ recommendation and reasoning for each:
 |-----------|--------|--------|
 | Final Tier-A source list with per-source review | **settled** — three platforms built, rest reviewed | nothing |
 | Backup erasure approach | **recommended** — stated 35-day window over crypto-shredding | privacy notice wording |
-| Email consent basis and sending domain | **recommended** — SES + double opt-in, Resend in dev | first digest send (step 18) |
+| Email consent basis and sending domain | **recommended** — SES + double opt-in | real *delivery*; step 18's logic is built and verifiable without it |
 | EU AI Act classification for the recommender | **needs counsel** — not an engineering decision | EU launch, not development |
 
 ## Project (WHAT / WHY)
@@ -94,11 +155,11 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/pipeline/` | Work queue, state machine, sweeper, leases. The spine every worker plugs into |
 | `internal/opportunity/` | Canonical model, provenance, normalization, dedup, liveness |
 | `internal/company/` | Entity resolution on registrable domain, alias table |
-| `internal/skill/` | Ontology, aliases, edges, demand time-series writes |
+| `internal/skill/` | Ontology, aliases, edges, demand time-series writes. **Planned, not built** — the tables exist from migration 000004 and have no writer |
 | `internal/enrich/` | Extraction, embeddings, the content-hash cache, hot/cold lanes |
 | `internal/matching/` | Eligibility gate, retrieval, fit scoring, explanation |
 | `internal/engagement/` | Feed, saves, applications, dismissals |
-| `internal/digest/` | Notification budget, quiet hours, the empty case |
+| `internal/digest/` | Notification budget, quiet hours, the minimum band, the empty case. Transport behind a `Sender` interface |
 | `internal/auth/`, `internal/profile/` | Identity, sessions, tenancy, resume ingestion |
 | `internal/admin/` | Source health, merge/unmerge, quarantine, flag queue |
 | `internal/enrich/` | Extraction. The cache key is the determinism guarantee, not just a cost saving |
@@ -110,6 +171,8 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `pkg/` | logger, telemetry, middleware, clients. Nothing domain-specific |
 | `migrations/` | golang-migrate. Never hand-write DDL outside a migration |
 | `testdata/` | Recorded source payloads (golden files). The highest-value tests in the repo |
+| `internal/apicontract/` | Reflection test over the json paths the console reads. Catches a renamed tag, which neither compiler can |
+| `web/` | The console: React + TS + Vite, TanStack Query, Tailwind v4. Display rules in `web/README.md` |
 | `docs/` | The blueprint, ADRs, runbooks |
 
 No `proto/` and no per-service repos until a blueprint §36 trigger fires.
@@ -223,6 +286,52 @@ blueprint's audit found.
     "Not enough information", which is a different statement from "Stretch" and only one of them
     is about the user.
 
+24. **Reversing a merge must restore data, not just record an intention.** `opportunity_merge`
+    stores the ids of the source rows it moved, not only a count: with two merges into one
+    canonical there is nothing to infer from, and the original `UndoMerge` stamped `undone_at`
+    while changing no data at all. An un-merge is three statements in one transaction — restore
+    exactly those rows, clear `merged_into` and stamp `unmerged_at`, mark the merge reversed.
+    Dedup skips anything with `unmerged_at` set: a human said these are different roles and a
+    simhash does not overrule that, or the operator watches their un-merge undo itself.
+
+25. **A cleanup delete is scoped to what the operation is about.** The source purge deletes
+    orphaned postings only from the ids that source contributed to. A table-wide
+    `WHERE NOT EXISTS` orphan sweep would remove unrelated postings as a side effect of purging
+    one source — cleanup with unbounded blast radius. Destructive admin actions also count first
+    and require the operator to echo the number back.
+
+26. **An objective, metric or score we cannot measure reports as unmeasurable with the reason
+    attached — never as green.** Five of the twelve SLOs cannot be measured yet: liveness
+    accuracy needs the employer's answer, dedup precision needs labelled pairs, the digest does
+    not exist. A dashboard showing green for something nobody measured is worse than one with a
+    visible gap, because the gap prompts a question and the false green ends the conversation.
+    `TestLivenessAccuracyStaysUnmeasurableUntilGroundTruthExists` fails if anyone flips the
+    product's central claim to measurable, since that means finding ground truth or starting to
+    guess. This is hard rule 3 applied to ourselves.
+
+27. **A feed item carries the posting, and the posting is not optional.** The daily feed may not
+    show a role whose open state is unknown, so `FeedItem.Posting` is a value, never a pointer and
+    never `omitempty` — the handler drops an item it cannot describe rather than sending a partial
+    one. This was wrong for the whole of step 17: the matcher returned a ranking and nothing
+    carried the posting, so a card had no company, no salary, no apply link and no way to say
+    "verified open". Because the client's DTOs are hand-written, neither compiler noticed.
+    `internal/apicontract` is the guard: a reflection test over every json path the console reads,
+    which fails on a rename. Fetch the postings for the page, not for the candidate set —
+    loading 188 rows to render 7 cost 40 ms of the cold p95.
+
+28. **The bar for interrupting someone is a BAND, and "Not enough information" clears none of
+    them.** The digest's minimum is `strong` or `worth_a_look`, never a numeric threshold: hard
+    rule 3 forbids treating an uncalibrated score as a probability, and that applies to our own
+    send decision as much as to anything rendered. `BandInsufficient` is not the bottom of a
+    ladder — it says we could observe less than 60% of the model — so treating it as a low score
+    would mean emailing people on the strength of data we admit we do not have, and doing it most
+    often exactly when extraction is broken. An unrecognized bar sends nothing rather than
+    everything: failing closed is the only safe direction for a rule about interrupting people.
+    A related pair: quiet hours **defer and write no row**, so the day stays claimable, while an
+    `empty` outcome writes a row that is **provisional** — ingestion runs all day and a Strong fit
+    appearing at 10:00 must still reach the user, so a later run upgrades that row in place. Only
+    `sent` is terminal, and the `outcome <> 'sent'` guard in the UPDATE is the daily cap.
+
 ## The two numbers
 
 The most commonly misunderstood part of the system. Keep them separate in code, not just in the UI.
@@ -327,6 +436,18 @@ make test-golden           # source parser fixtures — the ones that catch real
 make eval                  # NDCG@10 / Precision@7 / coverage. Gates scoring changes
 make test-integration      # provisions a disposable database, then runs the suite
 make check-erasure         # asserts a deleted identifier appears nowhere
+./bin/devsignal --role=slo  # every objective against its target; exits non-zero on a breach
+make loadtest              # drives the real API and checks the latency objectives
+./bin/devsignal --role=digest --dry-run  # compose and print; claim no day, send nothing
+```
+
+The Go targets name `./cmd/... ./internal/... ./pkg/...` rather than `./...` on purpose: an npm
+dependency under `web/node_modules` ships its own Go package, and `./...` compiles and tests it.
+
+For the console, `npm run build` runs `tsc -b` first, so a type error fails the build:
+
+```bash
+cd web && npm install && npm run dev   # :5173, proxies /api and /internal to :8080
 ```
 
 The integration suite is destructive — the queue tests claim and advance rows table-wide,

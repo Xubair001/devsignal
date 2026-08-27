@@ -170,9 +170,23 @@ func (s *Service) MatchForUser(ctx context.Context, userID pgtype.UUID, limit in
 	}
 
 	now := s.clock.Now()
+
+	// Writes are COLLECTED and flushed once, not issued per candidate.
+	//
+	// The per-candidate version was an N+1 write that the load test caught: over
+	// 188 candidates a single feed request issued 376 INSERTs, one network round
+	// trip each, and took 842ms. Nothing about the statements changed — only how
+	// many times the request waits for the network.
+	eligWrites := make([]store.PutEligibilityResultBatchParams, 0, len(candidates))
+	fitWrites := make([]store.PutFitScoreBatchParams, 0, len(candidates))
+
 	for _, c := range candidates {
 		elig := CheckEligibility(profile, c)
-		s.recordEligibility(ctx, userID, c, prof.ProfileVersion, elig)
+		eligWrites = append(eligWrites, store.PutEligibilityResultBatchParams{
+			UserID: userID, OpportunityID: c.Opportunity.ID,
+			ProfileVersion: prof.ProfileVersion, OpportunityVersion: c.Opportunity.Version,
+			Eligible: elig.Eligible, FailedChecks: elig.FailedChecks(),
+		})
 		if !elig.Eligible {
 			res.Excluded = append(res.Excluded, Excluded{Opportunity: c.Opportunity, Eligibility: elig})
 			continue
@@ -183,7 +197,11 @@ func (s *Service) MatchForUser(ctx context.Context, userID pgtype.UUID, limit in
 			res.CacheHits++
 		} else {
 			fit = ComputeFit(profile, c)
-			s.storeFit(ctx, userID, c, prof.ProfileVersion, fit)
+			if w, err := fitParams(userID, c, prof.ProfileVersion, fit); err == nil {
+				fitWrites = append(fitWrites, w)
+			} else {
+				s.log.Error("encoding fit breakdown", "err", err)
+			}
 		}
 
 		res.Passed++
@@ -200,6 +218,12 @@ func (s *Service) MatchForUser(ctx context.Context, userID pgtype.UUID, limit in
 			Channels: channels[c.Opportunity.ID.String()],
 		})
 	}
+
+	// One round trip each. Failures are logged rather than returned: a missing
+	// cache row costs a recomputation and a missing audit row costs a diagnostic,
+	// while failing the request costs the user their feed.
+	s.flushEligibility(ctx, eligWrites)
+	s.flushFitScores(ctx, fitWrites)
 
 	// Priority orders the feed. Ties broken on id so the order is reproducible.
 	sort.SliceStable(res.Matches, func(i, j int) bool {
@@ -332,17 +356,15 @@ func (s *Service) cachedScores(
 	return out, nil
 }
 
-// storeFit caches a score. A failure here costs a recomputation, never
-// correctness, so it is logged rather than returned.
-func (s *Service) storeFit(
-	ctx context.Context, userID pgtype.UUID, c Candidate, profileVersion int32, f Fit,
-) {
+// fitParams builds one cache row, or reports why it could not.
+func fitParams(
+	userID pgtype.UUID, c Candidate, profileVersion int32, f Fit,
+) (store.PutFitScoreBatchParams, error) {
 	factors, err := json.Marshal(f.Factors)
 	if err != nil {
-		s.log.Error("encoding fit breakdown", "err", err)
-		return
+		return store.PutFitScoreBatchParams{}, err
 	}
-	if err := s.q.PutFitScore(ctx, store.PutFitScoreParams{
+	return store.PutFitScoreBatchParams{
 		UserID:             userID,
 		OpportunityID:      c.Opportunity.ID,
 		WeightsVersion:     WeightsVersion,
@@ -352,26 +374,38 @@ func (s *Service) storeFit(
 		Score:              int16(f.Score),
 		MaxPossible:        int16(f.MaxPossible),
 		Factors:            factors,
-	}); err != nil {
-		s.log.Error("caching fit score", "err", err)
-	}
+	}, nil
 }
 
-// recordEligibility stores the gate's verdict, including the passes.
-//
-// Storing passes too, not only failures: the difference between "excluded" and
-// "never considered" is what makes the operational view trustworthy.
-func (s *Service) recordEligibility(
-	ctx context.Context, userID pgtype.UUID, c Candidate, profileVersion int32, e Eligibility,
-) {
-	if err := s.q.PutEligibilityResult(ctx, store.PutEligibilityResultParams{
-		UserID:             userID,
-		OpportunityID:      c.Opportunity.ID,
-		ProfileVersion:     profileVersion,
-		OpportunityVersion: c.Opportunity.Version,
-		Eligible:           e.Eligible,
-		FailedChecks:       e.FailedChecks(),
-	}); err != nil {
-		s.log.Error("recording eligibility", "err", err)
+// flushFitScores writes the score cache in one round trip.
+func (s *Service) flushFitScores(ctx context.Context, rows []store.PutFitScoreBatchParams) {
+	if len(rows) == 0 {
+		return
 	}
+	br := s.q.PutFitScoreBatch(ctx, rows)
+	defer func() { _ = br.Close() }()
+	br.Exec(func(i int, err error) {
+		if err != nil {
+			s.log.Error("caching fit score", "index", i, "err", err)
+		}
+	})
+}
+
+// flushEligibility writes the gate's verdicts in one round trip.
+//
+// Passes are stored as well as failures: the difference between "excluded" and
+// "never considered" is what makes the operational view trustworthy.
+func (s *Service) flushEligibility(
+	ctx context.Context, rows []store.PutEligibilityResultBatchParams,
+) {
+	if len(rows) == 0 {
+		return
+	}
+	br := s.q.PutEligibilityResultBatch(ctx, rows)
+	defer func() { _ = br.Close() }()
+	br.Exec(func(i int, err error) {
+		if err != nil {
+			s.log.Error("recording eligibility", "index", i, "err", err)
+		}
+	})
 }

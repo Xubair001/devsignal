@@ -140,6 +140,14 @@ SELECT (SELECT count(*) FROM profile p        WHERE p.user_id  = sqlc.arg(user_i
      + (SELECT count(*) FROM eligibility_result er WHERE er.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM engagement_event ee WHERE ee.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM resume r         WHERE r.user_id  = sqlc.arg(user_id))
+     -- Step 18. A notification setting holds a timezone and quiet hours; a
+     -- digest_send row records which postings were mailed to this person and
+     -- when. Both cascade from app_user, but a cascade is not a verification:
+     -- this count is what makes the erasure guarantee checkable rather than
+     -- assumed, and a table missing from HERE is the specific way a derived
+     -- artifact gets quietly left behind.
+     + (SELECT count(*) FROM notification_setting ns WHERE ns.user_id = sqlc.arg(user_id))
+     + (SELECT count(*) FROM digest_send ds  WHERE ds.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM user_session us  WHERE us.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM refresh_token rt WHERE rt.user_id = sqlc.arg(user_id))
      + (SELECT count(*) FROM user_token ut    WHERE ut.user_id = sqlc.arg(user_id))
@@ -177,3 +185,14 @@ SELECT pe.embedding, pe.embedding_model, pe.profile_version AS embedded_profile_
   JOIN profile p ON p.user_id = pe.user_id
  WHERE pe.user_id = sqlc.arg(user_id)
    AND pe.embedding_version = sqlc.arg(embedding_version);
+
+-- name: AnonymizeUserFlags :execrows
+-- Erasure. A flag is about the POSTING, not the reporter, so the report survives
+-- with its author removed rather than being deleted.
+--
+-- Done explicitly rather than left to the ON DELETE SET NULL cascade, so the
+-- erasure report can state a count for it. A scam report vanishing because
+-- someone closed their account would be the wrong trade — the listing is still
+-- a problem for everyone else.
+UPDATE opportunity_flag SET reported_by = NULL
+ WHERE reported_by = sqlc.arg(user_id);

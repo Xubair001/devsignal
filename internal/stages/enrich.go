@@ -59,6 +59,16 @@ func (e *Enricher) Handle(ctx context.Context, it pipeline.Item) error {
 		return e.advance(ctx, it, next, row.ContentHash)
 	}
 
+	// No extraction provider configured. Hard rule 7: enrichment failure must not
+	// prevent a posting reaching `ready` with a degraded quality flag, and that
+	// applies to a provider that was never configured as much as to one that
+	// failed. Debug rather than Warn: the worker says this once at startup, and
+	// repeating it per posting would bury everything else in the log.
+	if e.svc == nil {
+		e.log.Debug("skipping extraction: no provider configured", "id", it.ID.String())
+		return e.advance(ctx, it, next, row.ContentHash)
+	}
+
 	out, err := e.svc.Extract(ctx, row.ContentHash, text, e.Lane)
 	if err != nil {
 		// A systemic fault fails identically for every posting, so it must not

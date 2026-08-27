@@ -56,6 +56,43 @@ type ListFilter struct {
 	Cursor     string
 }
 
+// SummariesByID returns the read-side summary for a specific set of ids,
+// keyed by id.
+//
+// This exists so the feed can render a card without a second DTO. The feed
+// knows which postings it selected and in what order; what it does not have is
+// the company, salary, apply URL and liveness, and liveness in particular is
+// not optional decoration — the display rules forbid showing a posting in the
+// daily feed whose open state is unknown. Sharing Summary means a field added
+// for the browse list cannot silently go missing here.
+//
+// Serving filters still apply: a posting closed or merged between scoring and
+// render is absent from the map, and the caller drops it rather than showing a
+// dead role.
+func (s *Service) SummariesByID(
+	ctx context.Context, ids []pgtype.UUID,
+) (map[string]Summary, error) {
+	if len(ids) == 0 {
+		return map[string]Summary{}, nil
+	}
+	rows, err := s.q.ListOpportunities(ctx, store.ListOpportunitiesParams{
+		Ids: ids,
+		// The id list is the bound. PageSize is still required by the query, so
+		// it is set to the number asked for rather than a page default that
+		// would silently truncate the feed.
+		PageSize: int32(len(ids)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("summaries by id: %w", err)
+	}
+	now := s.clock.Now()
+	out := make(map[string]Summary, len(rows))
+	for _, r := range rows {
+		out[r.ID.String()] = s.summaryFromList(r, now)
+	}
+	return out, nil
+}
+
 func (s *Service) List(ctx context.Context, f ListFilter) (*Page, error) {
 	size := f.PageSize
 	if size <= 0 {

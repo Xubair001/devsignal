@@ -12,6 +12,26 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 )
 
+const anonymizeUserFlags = `-- name: AnonymizeUserFlags :execrows
+UPDATE opportunity_flag SET reported_by = NULL
+ WHERE reported_by = $1
+`
+
+// Erasure. A flag is about the POSTING, not the reporter, so the report survives
+// with its author removed rather than being deleted.
+//
+// Done explicitly rather than left to the ON DELETE SET NULL cascade, so the
+// erasure report can state a count for it. A scam report vanishing because
+// someone closed their account would be the wrong trade — the listing is still
+// a problem for everyone else.
+func (q *Queries) AnonymizeUserFlags(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, anonymizeUserFlags, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeErasureRequest = `-- name: CompleteErasureRequest :exec
 UPDATE erasure_request SET completed_at = now()
  WHERE id = $1
@@ -36,6 +56,14 @@ SELECT (SELECT count(*) FROM profile p        WHERE p.user_id  = $1)
      + (SELECT count(*) FROM eligibility_result er WHERE er.user_id = $1)
      + (SELECT count(*) FROM engagement_event ee WHERE ee.user_id = $1)
      + (SELECT count(*) FROM resume r         WHERE r.user_id  = $1)
+     -- Step 18. A notification setting holds a timezone and quiet hours; a
+     -- digest_send row records which postings were mailed to this person and
+     -- when. Both cascade from app_user, but a cascade is not a verification:
+     -- this count is what makes the erasure guarantee checkable rather than
+     -- assumed, and a table missing from HERE is the specific way a derived
+     -- artifact gets quietly left behind.
+     + (SELECT count(*) FROM notification_setting ns WHERE ns.user_id = $1)
+     + (SELECT count(*) FROM digest_send ds  WHERE ds.user_id = $1)
      + (SELECT count(*) FROM user_session us  WHERE us.user_id = $1)
      + (SELECT count(*) FROM refresh_token rt WHERE rt.user_id = $1)
      + (SELECT count(*) FROM user_token ut    WHERE ut.user_id = $1)

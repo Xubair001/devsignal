@@ -9,11 +9,15 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
@@ -40,7 +44,9 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 	var err error
 	switch cfg.Exporter {
 	case "stdout", "":
-		exp, err = stdouttrace.New(stdouttrace.WithPrettyPrint())
+		// stderr for the same reason as metrics below: stdout is the command's.
+		exp, err = stdouttrace.New(
+			stdouttrace.WithPrettyPrint(), stdouttrace.WithWriter(os.Stderr))
 	default:
 		return nil, fmt.Errorf("telemetry: unsupported exporter %q (stdout only until a collector exists)", cfg.Exporter)
 	}
@@ -70,5 +76,36 @@ func Init(ctx context.Context, cfg Config) (Shutdown, error) {
 		propagation.TraceContext{}, propagation.Baggage{},
 	))
 
-	return tp.Shutdown, nil
+	// Metrics, on a periodic reader. A separate provider from tracing because the
+	// two are sampled differently: traces are sampled hard, metrics never are.
+	// Sampling a counter does not reduce its cost, it makes it wrong.
+	// To stderr, not stdout. A CLI role's stdout is its report, and a metrics dump
+	// landing in the middle of it makes the output unparseable by anything —
+	// including the operator reading it.
+	mexp, err := stdoutmetric.New(stdoutmetric.WithWriter(os.Stderr))
+	if err != nil {
+		return nil, fmt.Errorf("telemetry: metric exporter: %w", err)
+	}
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(res),
+		// A minute, not the 10-second default: the SLO windows are hours and days,
+		// and a shorter interval buys nothing but volume.
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp,
+			sdkmetric.WithInterval(time.Minute))),
+	)
+	otel.SetMeterProvider(mp)
+	if err := InitMetrics(mp.Meter("devsignal")); err != nil {
+		return nil, err
+	}
+
+	// Both providers flush, and a failure in either is reported. Losing metrics on
+	// the way out means losing the window that contains the shutdown.
+	return func(ctx context.Context) error {
+		terr := tp.Shutdown(ctx)
+		merr := mp.Shutdown(ctx)
+		if terr != nil {
+			return terr
+		}
+		return merr
+	}, nil
 }

@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/Xubair001/devsignal/internal/admin"
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
 	"github.com/Xubair001/devsignal/internal/embed"
@@ -33,12 +34,14 @@ import (
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
+	"github.com/Xubair001/devsignal/internal/loadtest"
 	"github.com/Xubair001/devsignal/internal/matching"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
 	"github.com/Xubair001/devsignal/internal/profile"
 	"github.com/Xubair001/devsignal/internal/profileindex"
 	"github.com/Xubair001/devsignal/internal/retrieve"
+	"github.com/Xubair001/devsignal/internal/slo"
 	"github.com/Xubair001/devsignal/internal/source"
 
 	// Importing an adapter family is what enables it.
@@ -57,18 +60,32 @@ import (
 func main() {
 	role := flag.String("role", "api",
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
-			"spend | retrieve | match | eval | reindex-profiles | digest | admin")
+			"spend | retrieve | match | eval | reindex-profiles | "+
+			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest | "+
+			"digest-optin")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
 	userID := flag.String("user", "", "user id (retrieve, match)")
+	email := flag.String("email", "", "user email (grant-admin, revoke-admin)")
+	users := flag.Int("users", 0, "distinct profiles driving traffic (loadtest)")
+	concurrency := flag.Int("concurrency", 0, "in-flight requests (loadtest)")
+	duration := flag.Duration("duration", 0, "per-phase duration (loadtest)")
 	recordBaseline := flag.Bool("record-baseline", false,
 		"eval: overwrite the committed baseline with this run (a reviewed act)")
+	dryRun := flag.Bool("dry-run", false,
+		"digest: compose and print, claim no day and send nothing")
+	timezone := flag.String("timezone", "UTC",
+		"digest-optin: the user's IANA timezone, e.g. Europe/London")
+	minBand := flag.String("min-band", "strong",
+		"digest-optin: minimum band to interrupt on (strong | worth_a_look)")
 	flag.Parse()
 
 	if err := run(*role, flags{
 		source: *srcName, file: *srcFile, reviewer: *reviewer, user: *userID,
-		recordBaseline: *recordBaseline,
+		email: *email, recordBaseline: *recordBaseline,
+		users: *users, concurrency: *concurrency, duration: *duration,
+		dryRun: *dryRun, timezone: *timezone, minBand: *minBand,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -84,7 +101,14 @@ type flags struct {
 	file           string
 	reviewer       string
 	user           string
+	email          string
 	recordBaseline bool
+	users          int
+	concurrency    int
+	duration       time.Duration
+	dryRun         bool
+	timezone       string
+	minBand        string
 }
 
 func run(role string, f flags) error {
@@ -149,8 +173,20 @@ func run(role string, f flags) error {
 		return evalReport(ctx, log, pool, f.recordBaseline)
 	case "reindex-profiles":
 		return reindexProfiles(ctx, log, pool)
-	case "digest", "admin":
-		return fmt.Errorf("role %q is not implemented yet", role)
+	case "grant-admin":
+		return grantAdmin(ctx, log, pool, f.email, true)
+	case "revoke-admin":
+		return grantAdmin(ctx, log, pool, f.email, false)
+	case "list-admins":
+		return listAdmins(ctx, pool)
+	case "slo":
+		return sloReport(ctx, pool)
+	case "loadtest":
+		return loadTest(ctx, cfg, log, pool, f)
+	case "digest":
+		return digestRun(ctx, cfg, log, pool, f)
+	case "digest-optin":
+		return digestOptIn(ctx, cfg, log, pool, f)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
 	}
@@ -183,12 +219,24 @@ func openDB(ctx context.Context, cfg *config.Config, log *slog.Logger) (*pgxpool
 	return pool, nil
 }
 
-func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
+// buildRouter assembles the whole API.
+//
+// Extracted from serveAPI so the load test drives the REAL handler in-process
+// rather than a reconstruction of it. A load test against a hand-built router
+// measures the hand-built router, and the SLO it reports is about something users
+// never touch.
+func buildRouter(
+	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool,
+) (http.Handler, error) {
 	r := chi.NewRouter()
 	// No RealIP: it is vulnerable to spoofing (it trusts X-Forwarded-For /
 	// X-Real-IP whether or not your infrastructure sets them). When rate
 	// limiting needs a client IP, derive it from a trusted-proxy config.
 	r.Use(middleware.RequestID, middleware.Recoverer)
+	// After the router so the chi route pattern is populated: recording the raw
+	// path would create one metric series per opportunity id, which is hard rule
+	// 12's exact failure mode.
+	r.Use(telemetry.MetricsMiddleware)
 
 	// Liveness: is the process up. Never touches a dependency — a DB blip must
 	// not get the pod killed.
@@ -214,7 +262,10 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 	authSvc := auth.NewService(pool, log, auth.DefaultPolicy(), nil)
 	authH := auth.NewHandler(authSvc, log)
 
-	oppH := opportunity.NewHandler(opportunity.NewService(pool, nil), log)
+	// One instance, shared: the feed and the browse list must answer with the
+	// same posting fields, and two services would be two places to forget one.
+	oppSvc := opportunity.NewService(pool, nil)
+	oppH := opportunity.NewHandler(oppSvc, log)
 
 	// Object storage is required for resumes. Failing at startup is correct: an
 	// API that accepts an upload it cannot store would lose user data silently.
@@ -224,7 +275,7 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		PathStyle: cfg.S3PathStyle,
 	})
 	if err != nil {
-		return fmt.Errorf("object storage: %w", err)
+		return nil, fmt.Errorf("object storage: %w", err)
 	}
 	engagementSvc := engagement.New(pool, log)
 	profileH := profile.NewHandler(
@@ -233,7 +284,22 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		log)
 
 	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
-	feedH := engagement.NewHandler(matcher, engagementSvc, log)
+	feedH := engagement.NewHandler(matcher, engagementSvc, oppSvc, log)
+	adminH := admin.NewHandler(admin.New(pool, log), log)
+	sloH := admin.NewSLOHandler(pool, log)
+
+	// The operations surface. Authenticated like everything else, then gated by one
+	// authorization middleware — not a check per handler, because the handler that
+	// ends up missing it is always the destructive one.
+	r.Route("/internal/admin", func(adm chi.Router) {
+		adm.Use(authH.Authenticator)
+		adm.Use(adminH.RequireAdmin)
+		adm.Mount("/", adminH.Routes())
+		// The objective report, on the operations surface rather than a public one:
+		// a breached SLO is operational detail, and publishing it invites it being
+		// read as a promise to users.
+		adm.Get("/slo", sloH.Report)
+	})
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Mount("/auth", authH.Routes())
@@ -252,6 +318,9 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 			// and reads identity from the context, never from a parameter.
 			priv.Mount("/feed", feedH.Routes())
 			priv.Mount("/engagement", feedH.EngagementRoutes())
+			// Reporting a listing is a user action, not an admin one, so it lives
+			// under the user API rather than behind the admin gate.
+			priv.Mount("/listings", adminH.FlagRoutes())
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {
@@ -267,11 +336,18 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 
 	// Trace real requests, not health probes — kubelet polling would otherwise
 	// dominate the trace volume and tell you nothing.
-	handler := otelhttp.NewHandler(r, "http",
+	return otelhttp.NewHandler(r, "http",
 		otelhttp.WithFilter(func(req *http.Request) bool {
 			return req.URL.Path != "/healthz" && req.URL.Path != "/readyz"
 		}),
-	)
+	), nil
+}
+
+func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
+	handler, err := buildRouter(ctx, cfg, log, pool)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,
@@ -331,15 +407,38 @@ func runWorkers(ctx context.Context, appCfg *config.Config, log *slog.Logger, po
 	deduper := stages.NewDeduper(pool, log)
 
 	// The model is a configuration value, not an architectural commitment: the
-	// provider is an interface so tiers can be compared against the regression
-	// set without touching the pipeline.
-	provider, perr := enrich.NewClaudeProvider(enrich.ClaudeConfig{
-		APIKey: appCfg.AnthropicAPIKey, Model: appCfg.ExtractionModel,
+	// provider is an interface so tiers — and now vendors — can be compared
+	// against the regression set without touching the pipeline.
+	provider, perr := enrich.Resolve(enrich.ResolveConfig{
+		Provider:        appCfg.ExtractionProvider,
+		AnthropicAPIKey: appCfg.AnthropicAPIKey,
+		OpenAIAPIKey:    appCfg.OpenAIAPIKey,
+		Model:           appCfg.ExtractionModel,
+		ReasoningEffort: appCfg.ExtractionReasoningEffort,
 	})
-	if perr != nil {
+	switch {
+	case errors.Is(perr, enrich.ErrNoProvider):
+		// Hard rule 7: no stage may block another. A worker with no model still
+		// has real work to do — fetch, parse, normalize, dedup, embed — and a
+		// posting with no extracted skills is still better than an invisible one.
+		// Loud, because silently degrading every posting is not something to
+		// discover from a dashboard three weeks later.
+		log.Warn("extraction disabled; postings will reach ready with a degraded "+
+			"quality flag and no extracted skills", "reason", perr.Error())
+	case perr != nil:
+		// A misconfiguration, as opposed to an absence. This one stops the worker:
+		// running with the wrong model silently would poison the extraction cache,
+		// which is keyed on model id and is meant to be the determinism guarantee.
 		return fmt.Errorf("extraction provider: %w", perr)
+	default:
+		log.Info("extraction provider ready", "model_id", provider.ModelID())
 	}
-	enricher := stages.NewEnricher(pool, enrich.NewService(pool, provider, log), log)
+
+	var enrichSvc *enrich.Service
+	if provider != nil {
+		enrichSvc = enrich.NewService(pool, provider, log)
+	}
+	enricher := stages.NewEnricher(pool, enrichSvc, log)
 
 	// Local, deterministic and free by default. A hosted model drops in behind
 	// the interface once the eval harness shows retrieval quality justifies the
@@ -903,3 +1002,213 @@ func evalReport(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, recor
 }
 
 func round3(v float64) float64 { return math.Round(v*1000) / 1000 }
+
+// grantAdmin promotes or demotes a user.
+//
+// Deliberately a binary role rather than an HTTP endpoint. Granting admin needs
+// database access, so a compromised admin session cannot mint more admins — which
+// is the difference between one bad afternoon and a persistent foothold.
+func grantAdmin(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, email string, grant bool) error {
+	if email == "" {
+		return fmt.Errorf("--email is required")
+	}
+	q := store.New(pool)
+
+	var n int64
+	var err error
+	if grant {
+		n, err = q.GrantAdmin(ctx, email)
+	} else {
+		n, err = q.RevokeAdmin(ctx, email)
+	}
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("no active user with that email")
+	}
+	// Logged, not audited: there is no session and so no actor to attribute it to.
+	// The audit log records what admins DO; this records how they became one, and
+	// the honest place for it is the operator's own shell history and this line.
+	log.Warn("admin role changed", "email_domain", domainOf(email), "granted", grant)
+	fmt.Printf("admin %s for %s\n", map[bool]string{true: "granted", false: "revoked"}[grant], email)
+	return nil
+}
+
+func listAdmins(ctx context.Context, pool *pgxpool.Pool) error {
+	rows, err := store.New(pool).ListAdmins(ctx)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		fmt.Println("no administrators. grant one with --role=grant-admin --email=you@example.com")
+		return nil
+	}
+	for _, r := range rows {
+		fmt.Printf("  %-40s since %s\n", r.Email, r.CreatedAt.Time.Format(time.DateOnly))
+	}
+	return nil
+}
+
+// domainOf keeps a full email address out of the logs (hard rule 13) while
+// leaving enough to correlate an action with an operator.
+func domainOf(email string) string {
+	if i := strings.LastIndex(email, "@"); i >= 0 {
+		return email[i+1:]
+	}
+	return "unknown"
+}
+
+// sloReport prints every objective against its target.
+//
+// The interesting rows are the ones that are NOT met and the ones that cannot be
+// measured. A report where every line says "met" usually means the measurements
+// are missing rather than that everything is healthy, which is why unmeasurable
+// objectives are printed rather than filtered out.
+//
+// Exits non-zero when an objective is breached, so a cron or an alerting system
+// can consume it without parsing the output.
+func sloReport(ctx context.Context, pool *pgxpool.Pool) error {
+	ev := slo.NewEvaluator(pool)
+
+	rep, err := ev.Evaluate(ctx)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("service level objectives, measured %s\n\n",
+		rep.MeasuredAt.Format(time.RFC3339))
+
+	mark := map[slo.Status]string{
+		slo.StatusMet:          "  ok  ",
+		slo.StatusAtRisk:       " risk ",
+		slo.StatusBreached:     " MISS ",
+		slo.StatusNoData:       "  --  ",
+		slo.StatusUnmeasurable: "  ??  ",
+	}
+	for _, r := range rep.Results {
+		fmt.Printf("[%s] %-46s %s\n", mark[r.Status],
+			truncate(r.Objective.Description, 46), r.Detail)
+		if r.BurnRate != nil && *r.BurnRate > 1 {
+			sev := slo.Alert(*r.BurnRate, r.Objective.Window)
+			fmt.Printf("         burn %.1fx of the error budget", *r.BurnRate)
+			if sev != slo.SeverityNone {
+				fmt.Printf(" -> %s", sev)
+			}
+			fmt.Println()
+		}
+	}
+
+	// Verification recency, reported next to the SLOs but never as one of them.
+	// "How recently we checked" and "is this role genuinely open" are different
+	// claims, and only the first is something we can know.
+	if lf, err := ev.LivenessFreshness(ctx); err == nil && lf.Shown > 0 {
+		fmt.Printf("\nliveness VERIFICATION RECENCY (not the accuracy objective):\n")
+		fmt.Printf("  %d of %d visible postings checked within %s (%.1f%%), oldest check %s\n",
+			lf.CheckedRecently, lf.Shown, lf.Threshold, lf.Fraction()*100,
+			lf.OldestCheck.Round(time.Minute))
+	}
+
+	// The state distribution IS the pipeline dashboard (CLAUDE.md). A large count
+	// that is moving is healthy; a small one that is not is an incident, so the
+	// oldest entry travels with the count.
+	states, err := ev.PipelineStates(ctx)
+	if err != nil {
+		return err
+	}
+	if len(states) > 0 {
+		fmt.Printf("\npipeline state distribution:\n")
+		for _, s := range states {
+			age := time.Since(s.Oldest).Round(time.Second)
+			note := ""
+			if s.State != "ready" && s.State != "failed_permanent" && age > time.Hour {
+				note = "  <- stranded"
+			}
+			fmt.Printf("  %-18s %6d  oldest %s%s\n", s.State, s.Records, age, note)
+		}
+	}
+
+	breached, atRisk := rep.Breached(), rep.AtRisk()
+	unmeasurable := rep.Unmeasurable()
+	fmt.Printf("\n%d breached, %d at risk, %d not measurable\n",
+		len(breached), len(atRisk), len(unmeasurable))
+
+	if len(unmeasurable) > 0 {
+		fmt.Println("\nnot measurable yet, and why:")
+		for _, r := range unmeasurable {
+			fmt.Printf("  %-42s %s\n", truncate(r.Objective.Description, 42), r.Detail)
+		}
+	}
+
+	if len(breached) > 0 {
+		return fmt.Errorf("%d objective(s) breached", len(breached))
+	}
+	return nil
+}
+
+// loadTest drives the real API under load and checks the objectives.
+//
+// Blueprint §35 step 21 calls this "a test that can fail", so it exits non-zero
+// when an objective is breached. A load test that only prints numbers is a
+// benchmark, and a benchmark never tells you to stop.
+func loadTest(
+	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, f flags,
+) error {
+	// The REAL router, in process. A load test against a hand-built handler
+	// measures the hand-built handler.
+	handler, err := buildRouter(ctx, cfg, log, pool)
+	if err != nil {
+		return err
+	}
+
+	lc := loadtest.Config{
+		Users:       f.users,
+		Concurrency: f.concurrency,
+		Duration:    f.duration,
+	}
+	res, err := loadtest.NewDriver(pool, handler, log).Run(ctx, lc)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("load test: %d users, %d concurrent, %s per phase, %d postings in the corpus\n\n",
+		res.Config.Users, res.Config.Concurrency, res.Config.Duration, res.CorpusSize)
+
+	fmt.Println("cold (first request per user, nothing cached):")
+	fmt.Println(res.Cold)
+	fmt.Println("\nwarm (repeat requests, fit scores cached):")
+	fmt.Println(res.Warm)
+
+	fmt.Println("\nagainst the objectives:")
+	var breached int
+	for _, v := range res.Verdicts {
+		mark := "  ok  "
+		switch v.Status {
+		case slo.StatusBreached:
+			mark = " MISS "
+			breached++
+		case slo.StatusAtRisk:
+			mark = " risk "
+		case slo.StatusNoData:
+			mark = "  --  "
+		}
+		fmt.Printf("  [%s] %-38s %s\n", mark,
+			truncate(v.Objective.Description, 38), v.Detail)
+	}
+
+	// The corpus caveat travels with the result. A p95 measured against a few
+	// hundred postings says nothing about the blueprint's 200-500K, and a load
+	// test that omits that is a number people will quote later.
+	if res.CorpusSize < 10_000 {
+		fmt.Printf("\nNOTE: %d postings is far below the blueprint's 200-500K target corpus.\n"+
+			"These latencies are a floor, not a prediction: retrieval cost grows with\n"+
+			"the eligible set, and the vector index is not even chosen by the planner\n"+
+			"at this size.\n", res.CorpusSize)
+	}
+
+	if breached > 0 {
+		return fmt.Errorf("%d objective(s) breached under load", breached)
+	}
+	fmt.Println("\nall measured objectives met")
+	return nil
+}

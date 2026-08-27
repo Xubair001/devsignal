@@ -376,3 +376,171 @@ func TestErasureRemovesTheProfileVector(t *testing.T) {
 		t.Errorf("erasure incomplete: complete=%v traces=%d", rep.Complete, rep.TracesRemaining)
 	}
 }
+
+// A listing flag is about the POSTING. Erasing its author must anonymize the
+// report rather than delete it: a scam listing is still a problem for everyone
+// else after one reporter closes their account.
+func TestErasureAnonymizesFlagsRatherThanDeletingThem(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	svc := testService(t, pool)
+	userID, tenantID := newUser(t, pool)
+
+	head := "Backend engineer"
+	if _, err := svc.Save(ctx, userID, tenantID, Input{Headline: &head}); err != nil {
+		t.Fatal(err)
+	}
+
+	var companyID, oppID pgtype.UUID
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO company (canonical_domain, display_name) VALUES ($1,'Flag Co') RETURNING id`,
+		"flag-"+uuid.NewString()[:8]+".example").Scan(&companyID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO opportunity (company_id, title_raw, title_normalized, pipeline_state)
+		VALUES ($1,'Suspicious Role','suspicious role','ready') RETURNING id`,
+		companyID).Scan(&oppID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		c := context.Background()
+		_, _ = pool.Exec(c, `DELETE FROM opportunity WHERE company_id=$1`, companyID)
+		_, _ = pool.Exec(c, `DELETE FROM company WHERE id=$1`, companyID)
+	})
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO opportunity_flag (opportunity_id, reported_by, reason)
+		VALUES ($1,$2,'scam_or_fraud')`, oppID, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := svc.Erase(ctx, userID)
+	if err != nil {
+		t.Fatalf("erase: %v", err)
+	}
+
+	// The flag survives, with no author.
+	var count, withAuthor int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*), count(reported_by) FROM opportunity_flag WHERE opportunity_id=$1`,
+		oppID).Scan(&count, &withAuthor); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("%d flags survived erasure, want 1 — the listing is still a problem", count)
+	}
+	if withAuthor != 0 {
+		t.Error("the flag still names its reporter after erasure")
+	}
+
+	// And the report says so, rather than leaving it to a cascade nobody counted.
+	var step *store.ListErasureStepsRow
+	for i := range rep.Steps {
+		if rep.Steps[i].Location == LocFlags {
+			step = &rep.Steps[i]
+		}
+	}
+	if step == nil {
+		t.Fatal("no erasure step recorded for listing flags")
+	}
+	if step.Status != "done" || step.Items < 1 {
+		t.Errorf("flag step: status=%q items=%d, want done with at least 1",
+			step.Status, step.Items)
+	}
+	if !rep.Complete || rep.TracesRemaining != 0 {
+		t.Errorf("erasure incomplete: complete=%v traces=%d", rep.Complete, rep.TracesRemaining)
+	}
+}
+
+// TestErasureRemovesDigestDataAndCountsIt is hard rule 17 for step 18.
+//
+// Both tables cascade from app_user, so a naive test passes without them ever
+// being checked. The point of this one is the VERIFICATION path: if
+// notification_setting or digest_send is missing from CountUserTraces, the
+// erasure report says "0 traces remaining" while the data is still there — which
+// is the exact shape of a deletion promise that is not one.
+func TestErasureRemovesDigestDataAndCountsIt(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	svc := testService(t, pool)
+	userID, tenantID := newUser(t, pool)
+
+	q := store.New(pool)
+
+	// A DIFFERENTIAL check, one table at a time. An absolute threshold would pass
+	// on the strength of the profile and user rows alone, which is exactly how a
+	// missing table hides: the count is non-zero either way, and the assertion
+	// looks like it is testing something.
+	baseline, err := q.CountUserTraces(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO notification_setting (user_id, tenant_id, timezone,
+		    digest_enabled, digest_consent_at, digest_consent_wording_version)
+		VALUES ($1,$2,'Europe/London',true,now(),'test-v1')`,
+		userID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	withSettings, err := q.CountUserTraces(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withSettings != baseline+1 {
+		t.Fatalf("CountUserTraces went %d -> %d after adding a notification_setting; "+
+			"the erasure verification does not look at that table, so a leftover "+
+			"row would be reported as zero traces remaining", baseline, withSettings)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO digest_send (user_id, tenant_id, local_date,
+		    generation_started_at, generated_at, outcome, item_count, sender)
+		VALUES ($1,$2,current_date,now(),now(),'sent',3,'test')`,
+		userID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	withSend, err := q.CountUserTraces(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withSend != withSettings+1 {
+		t.Fatalf("CountUserTraces went %d -> %d after adding a digest_send; "+
+			"the erasure verification does not look at that table",
+			withSettings, withSend)
+	}
+
+	rep, err := svc.Erase(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Complete {
+		t.Error("erasure did not complete")
+	}
+	if rep.TracesRemaining != 0 {
+		t.Errorf("%d traces remain after erasure", rep.TracesRemaining)
+	}
+
+	for _, table := range []string{"notification_setting", "digest_send"} {
+		var n int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM `+table+` WHERE user_id=$1`, userID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s still holds %d rows for the erased user", table, n)
+		}
+	}
+
+	// Both locations must appear in the report, so an auditor reading it can see
+	// they were handled rather than inferring it from a total.
+	seen := map[string]bool{}
+	for _, st := range rep.Steps {
+		seen[st.Location] = true
+	}
+	for _, loc := range []string{LocNotificationSettings, LocDigestSends} {
+		if !seen[loc] {
+			t.Errorf("the erasure report does not mention %q", loc)
+		}
+	}
+}

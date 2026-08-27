@@ -243,3 +243,134 @@ func Validate(raw []byte) (Result, error) {
 	}
 	return r, nil
 }
+
+// ------------------------------------------------------- provider selection
+
+// Provider names accepted by Resolve.
+const (
+	ProviderAnthropic = "anthropic"
+	ProviderOpenAI    = "openai"
+	// ProviderNone disables extraction. Named rather than implicit, so a
+	// deployment that means to run without a model says so.
+	ProviderNone = "none"
+)
+
+// ResolveConfig is everything Resolve needs to pick a provider.
+type ResolveConfig struct {
+	// Provider is explicit. Empty means infer from whichever key is present.
+	Provider        string
+	AnthropicAPIKey string
+	OpenAIAPIKey    string
+	// Model overrides the provider's default. Empty takes the default for
+	// whichever provider was resolved, which is why the default cannot be set
+	// in config: the right one depends on the answer.
+	Model           string
+	ReasoningEffort string
+}
+
+// DefaultAnthropicModel is the flagship. Changing it invalidates the cache.
+const DefaultAnthropicModel = "claude-opus-5"
+
+// ErrNoProvider says extraction is not configured.
+//
+// A distinct error rather than a nil provider: hard rule 7 says enrichment
+// failure must not stop a posting reaching `ready` with a degraded quality flag,
+// and the caller can only make that distinction if "no model configured" is
+// separable from "the model call failed".
+var ErrNoProvider = errors.New(
+	"enrich: no extraction provider configured; set ANTHROPIC_API_KEY or " +
+		"OPENAI_API_KEY, or set EXTRACTION_PROVIDER=none to disable extraction")
+
+// Resolve picks a provider from configuration.
+//
+// Inference from a present key is what makes adding one line to .env sufficient,
+// but an explicit EXTRACTION_PROVIDER always wins so a machine holding both keys
+// is never ambiguous. Two keys and no choice is an ERROR rather than a
+// precedence rule nobody remembers: which vendor read the postings is part of
+// the extraction cache key and part of the audit trail, and picking it by
+// alphabetical accident is not a decision anyone made.
+func Resolve(cfg ResolveConfig) (Provider, error) {
+	name := cfg.Provider
+	if name == "" {
+		switch {
+		case cfg.AnthropicAPIKey != "" && cfg.OpenAIAPIKey != "":
+			return nil, errors.New(
+				"enrich: both ANTHROPIC_API_KEY and OPENAI_API_KEY are set; " +
+					"set EXTRACTION_PROVIDER to anthropic or openai — which model read " +
+					"a posting is part of its cache key and cannot be an accident")
+		case cfg.AnthropicAPIKey != "":
+			name = ProviderAnthropic
+		case cfg.OpenAIAPIKey != "":
+			name = ProviderOpenAI
+		default:
+			return nil, ErrNoProvider
+		}
+	}
+
+	switch name {
+	case ProviderNone:
+		return nil, ErrNoProvider
+	case ProviderAnthropic:
+		model := cfg.Model
+		if model == "" {
+			model = DefaultAnthropicModel
+		}
+		if err := checkModelBelongsTo(ProviderAnthropic, model); err != nil {
+			return nil, err
+		}
+		return NewClaudeProvider(ClaudeConfig{APIKey: cfg.AnthropicAPIKey, Model: model})
+	case ProviderOpenAI:
+		model := cfg.Model
+		if model == "" {
+			model = DefaultOpenAIModel
+		}
+		if err := checkModelBelongsTo(ProviderOpenAI, model); err != nil {
+			return nil, err
+		}
+		return NewOpenAIProvider(OpenAIConfig{
+			APIKey: cfg.OpenAIAPIKey, Model: model,
+			ReasoningEffort: cfg.ReasoningEffort,
+		})
+	default:
+		// Named explicitly rather than falling back to a default: a typo in a
+		// deploy config must not silently change which model reads the corpus.
+		return nil, fmt.Errorf("enrich: unknown EXTRACTION_PROVIDER %q (%s | %s | %s)",
+			name, ProviderAnthropic, ProviderOpenAI, ProviderNone)
+	}
+}
+
+// vendorPrefixes are model-name prefixes that unambiguously belong to one vendor.
+var vendorPrefixes = map[string][]string{
+	ProviderAnthropic: {"claude-"},
+	ProviderOpenAI:    {"gpt-", "o1", "o3", "o4", "chatgpt-"},
+}
+
+// checkModelBelongsTo rejects a model name that plainly belongs to the other
+// vendor.
+//
+// This exists because EXTRACTION_MODEL is a single variable shared by both
+// providers, and the failure it prevents was a real one: a .env carrying
+// EXTRACTION_MODEL=claude-opus-5 from the Anthropic default, plus a newly added
+// OPENAI_API_KEY, resolved to "openai:claude-opus-5" and would have 400'd on
+// every posting in the corpus.
+//
+// Deliberately only rejects the OTHER vendor's namespace rather than requiring a
+// known name. A gateway or a fine-tune can be called anything, and a whitelist
+// of model names is a file that goes stale the week after it is written — but
+// "claude-" reaching OpenAI is never right.
+func checkModelBelongsTo(provider, model string) error {
+	for other, prefixes := range vendorPrefixes {
+		if other == provider {
+			continue
+		}
+		for _, pre := range prefixes {
+			if strings.HasPrefix(model, pre) {
+				return fmt.Errorf(
+					"enrich: EXTRACTION_MODEL=%q is a %s model but the provider is %s; "+
+						"set EXTRACTION_MODEL to a %s model or leave it empty for the default",
+					model, other, provider, provider)
+			}
+		}
+	}
+	return nil
+}

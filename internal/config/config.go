@@ -36,7 +36,26 @@ type Config struct {
 	// Extraction. The model is a config value so tiers can be compared without a
 	// code change; an empty key lets the SDK resolve credentials itself.
 	AnthropicAPIKey string
+	OpenAIAPIKey    string
 	ExtractionModel string
+	// ExtractionProvider selects the vendor behind enrich.Provider. Empty means
+	// "infer from whichever key is set", which is what makes adding a key to
+	// .env sufficient — but an explicit value always wins, so a machine with
+	// both keys is never ambiguous.
+	ExtractionProvider string
+	// ExtractionReasoningEffort applies to reasoning models only. Extraction is a
+	// mechanical reading task and the default is deliberately the cheapest
+	// setting; see enrich.OpenAIConfig for the measurement.
+	ExtractionReasoningEffort string
+
+	// DigestSender selects the email transport. Defaults to "none", which FAILS
+	// rather than silently dropping mail: which provider sends the digest is an
+	// open decision (docs/OPEN-DECISIONS.md §3), and a retention channel that
+	// reports success while delivering nothing is the failure hard rule 26 is
+	// about. "log" renders each digest to DigestLogDir and delivers nothing,
+	// which is how step 18 is verifiable without a provider.
+	DigestSender string
+	DigestLogDir string
 
 	OTelEnabled     bool
 	OTelExporter    string
@@ -65,11 +84,18 @@ func Load() (*Config, error) {
 		HTTPWriteTimeout: dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 		ShutdownTimeout:  dur("SHUTDOWN_TIMEOUT", 30*time.Second),
 		AnthropicAPIKey:  str("ANTHROPIC_API_KEY", ""),
-		ExtractionModel:  str("EXTRACTION_MODEL", "claude-opus-5"),
-		OTelEnabled:      boolean("OTEL_ENABLED", true),
-		OTelExporter:     str("OTEL_EXPORTER", "stdout"),
-		OTelServiceName:  str("OTEL_SERVICE_NAME", "devsignal"),
-		OTelSampleRatio:  ratio("OTEL_SAMPLE_RATIO", 1.0),
+		OpenAIAPIKey:     str("OPENAI_API_KEY", ""),
+		// No default model here: the right default depends on which provider is
+		// resolved, so it is chosen after that rather than guessed before.
+		ExtractionModel:           str("EXTRACTION_MODEL", ""),
+		ExtractionProvider:        str("EXTRACTION_PROVIDER", ""),
+		ExtractionReasoningEffort: str("EXTRACTION_REASONING_EFFORT", ""),
+		DigestSender:              str("DIGEST_SENDER", "none"),
+		DigestLogDir:              str("DIGEST_LOG_DIR", "./tmp/digests"),
+		OTelEnabled:               boolean("OTEL_ENABLED", true),
+		OTelExporter:              str("OTEL_EXPORTER", "stdout"),
+		OTelServiceName:           str("OTEL_SERVICE_NAME", "devsignal"),
+		OTelSampleRatio:           ratio("OTEL_SAMPLE_RATIO", 1.0),
 	}
 	return c, c.validate()
 }

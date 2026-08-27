@@ -37,6 +37,15 @@ const (
 	LocEligibility = "eligibility_results"
 	// Live since step 17.
 	LocEngagement = "engagement_events"
+	// Live since step 19. Anonymized rather than deleted: a listing flag is about
+	// the posting, and a scam report must not vanish because its author closed
+	// their account.
+	LocFlags = "listing_flags"
+	// Live since step 18. Notification settings hold a timezone and quiet hours;
+	// the send log holds which postings were mailed to this person and when.
+	// Both are user-derived and both go with the account.
+	LocNotificationSettings = "notification_settings"
+	LocDigestSends          = "digest_sends"
 
 	// Declared but not yet applicable: these stores exist in the design and will
 	// hold user-derived data at their step. Recorded as not_applicable rather
@@ -56,6 +65,9 @@ var AllLocations = []string{
 	LocFitScores,
 	LocEligibility,
 	LocEngagement,
+	LocFlags,
+	LocDigestSends,
+	LocNotificationSettings,
 	LocSearchIndex,
 	LocRedisCache,
 	LocAnalytics,
@@ -125,6 +137,12 @@ func (s *Service) Erase(ctx context.Context, userID pgtype.UUID) (*ErasureReport
 		{LocFitScores, s.q.DeleteFitScores},
 		{LocEligibility, s.q.DeleteEligibilityResults},
 		{LocEngagement, s.q.DeleteEngagementEvents},
+		{LocFlags, s.q.AnonymizeUserFlags},
+		// The send log before the settings row, and both before the profile: a
+		// digest_send row records which postings were mailed to this person, which
+		// is user-derived data even though every id in it is public.
+		{LocDigestSends, s.q.DeleteDigestSends},
+		{LocNotificationSettings, s.q.DeleteNotificationSetting},
 		{LocResumeRows, s.q.DeleteResumeRows},
 		{LocProfileSkills, s.q.DeleteProfileSkills},
 		{LocProfile, s.q.DeleteProfileData},

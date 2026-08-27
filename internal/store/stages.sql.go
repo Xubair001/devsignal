@@ -97,12 +97,29 @@ const findBlockCandidates = `-- name: FindBlockCandidates :many
 SELECT o.id, o.company_id, o.ats_type, o.title_normalized, o.content_hash,
        o.simhash, o.location_country, o.remote_geo_scope,
        coalesce(length(o.description_text), 0)::int AS text_len,
-       s.apply_url, s.ats_job_id
+       -- Deterministic scalar subqueries, NOT a join.
+       --
+       -- opportunity_source is one-to-MANY and hard rule 11 keeps every row on a
+       -- merge, so a canonical posting accumulates them. A LEFT JOIN therefore
+       -- returns one row per source row, and that broke three different ways:
+       -- the block sweeper compared a posting against itself and tripped
+       -- opp_merge_not_self; the candidate LIMIT below was consumed by duplicates
+       -- so genuine duplicates went unseen; and the verdict depended on whichever
+       -- source row the planner happened to return. Ordering by id makes the
+       -- chosen row stable, which dedup needs to be reproducible.
+       (SELECT s.apply_url FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.apply_url IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS apply_url,
+       (SELECT s.ats_job_id FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.ats_job_id IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS ats_job_id
   FROM opportunity o
-  LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.block_key = $1
    AND o.id <> $2
    AND o.merged_into IS NULL
+   -- A human already said these are different roles. A simhash is not entitled
+   -- to overrule that, so an un-merged posting is never a merge candidate again.
+   AND o.unmerged_at IS NULL
    AND o.closed_at IS NULL
  LIMIT $3::int
 `
@@ -161,6 +178,32 @@ func (q *Queries) FindBlockCandidates(ctx context.Context, arg FindBlockCandidat
 	return items, nil
 }
 
+const findLatestMergeFor = `-- name: FindLatestMergeFor :one
+SELECT id, from_opportunity_id, into_opportunity_id, reason, confidence, source_rows_moved, merged_by, merged_at, undone_at, moved_source_ids FROM opportunity_merge
+ WHERE from_opportunity_id = $1 AND undone_at IS NULL
+ ORDER BY merged_at DESC
+ LIMIT 1
+`
+
+// The merge that hid this posting, so it can be reversed.
+func (q *Queries) FindLatestMergeFor(ctx context.Context, fromOpportunityID pgtype.UUID) (OpportunityMerge, error) {
+	row := q.db.QueryRow(ctx, findLatestMergeFor, fromOpportunityID)
+	var i OpportunityMerge
+	err := row.Scan(
+		&i.ID,
+		&i.FromOpportunityID,
+		&i.IntoOpportunityID,
+		&i.Reason,
+		&i.Confidence,
+		&i.SourceRowsMoved,
+		&i.MergedBy,
+		&i.MergedAt,
+		&i.UndoneAt,
+		&i.MovedSourceIds,
+	)
+	return i, err
+}
+
 const findMultiMemberBlocks = `-- name: FindMultiMemberBlocks :many
 SELECT block_key, count(*) AS members
   FROM opportunity
@@ -205,11 +248,24 @@ const getOpportunityForDedupe = `-- name: GetOpportunityForDedupe :one
 SELECT o.id, o.version, o.company_id, o.title_normalized, o.content_hash,
        o.simhash, o.block_key, o.location_country, o.remote_geo_scope, o.ats_type,
        coalesce(length(o.description_text), 0)::int AS text_len,
-       s.apply_url, s.ats_job_id
+       -- Deterministic scalar subqueries, NOT a join.
+       --
+       -- opportunity_source is one-to-MANY and hard rule 11 keeps every row on a
+       -- merge, so a canonical posting accumulates them. A LEFT JOIN therefore
+       -- returns one row per source row, and that broke three different ways:
+       -- the block sweeper compared a posting against itself and tripped
+       -- opp_merge_not_self; the candidate LIMIT below was consumed by duplicates
+       -- so genuine duplicates went unseen; and the verdict depended on whichever
+       -- source row the planner happened to return. Ordering by id makes the
+       -- chosen row stable, which dedup needs to be reproducible.
+       (SELECT s.apply_url FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.apply_url IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS apply_url,
+       (SELECT s.ats_job_id FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.ats_job_id IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS ats_job_id
   FROM opportunity o
-  LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.id = $1
- LIMIT 1
 `
 
 type GetOpportunityForDedupeRow struct {
@@ -292,11 +348,26 @@ const listBlockMembers = `-- name: ListBlockMembers :many
 SELECT o.id, o.version, o.company_id, o.title_normalized, o.content_hash,
        o.simhash, o.location_country, o.remote_geo_scope, o.ats_type, o.first_seen_at,
        coalesce(length(o.description_text), 0)::int AS text_len,
-       s.apply_url, s.ats_job_id
+       -- Deterministic scalar subqueries, NOT a join.
+       --
+       -- opportunity_source is one-to-MANY and hard rule 11 keeps every row on a
+       -- merge, so a canonical posting accumulates them. A LEFT JOIN therefore
+       -- returns one row per source row, and that broke three different ways:
+       -- the block sweeper compared a posting against itself and tripped
+       -- opp_merge_not_self; the candidate LIMIT below was consumed by duplicates
+       -- so genuine duplicates went unseen; and the verdict depended on whichever
+       -- source row the planner happened to return. Ordering by id makes the
+       -- chosen row stable, which dedup needs to be reproducible.
+       (SELECT s.apply_url FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.apply_url IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS apply_url,
+       (SELECT s.ats_job_id FROM opportunity_source s
+         WHERE s.opportunity_id = o.id AND s.ats_job_id IS NOT NULL
+         ORDER BY s.id LIMIT 1) AS ats_job_id
   FROM opportunity o
-  LEFT JOIN opportunity_source s ON s.opportunity_id = o.id
  WHERE o.block_key = $1
    AND o.merged_into IS NULL
+   AND o.unmerged_at IS NULL
    AND o.closed_at IS NULL
  ORDER BY o.first_seen_at, o.id
 `
@@ -381,13 +452,14 @@ func (q *Queries) MarkMerged(ctx context.Context, arg MarkMergedParams) (int64, 
 	return result.RowsAffected(), nil
 }
 
-const moveSourceRows = `-- name: MoveSourceRows :execrows
+const moveSourceRows = `-- name: MoveSourceRows :many
 UPDATE opportunity_source
    SET opportunity_id = $1,
        merge_reason = $2,
        merge_confidence = $3,
        merged_by = 'dedupe'
  WHERE opportunity_id = $4
+RETURNING id
 `
 
 type MoveSourceRowsParams struct {
@@ -397,17 +469,34 @@ type MoveSourceRowsParams struct {
 	FromID     pgtype.UUID
 }
 
-func (q *Queries) MoveSourceRows(ctx context.Context, arg MoveSourceRowsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, moveSourceRows,
+// Returns the ids it moved, not just how many.
+//
+// The count alone made un-merge impossible: with two merges into one canonical
+// there is no way to infer which rows came from where. Hard rule 11 says merges
+// are reversible, and this is what makes that true rather than aspirational.
+func (q *Queries) MoveSourceRows(ctx context.Context, arg MoveSourceRowsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, moveSourceRows,
 		arg.IntoID,
 		arg.Reason,
 		arg.Confidence,
 		arg.FromID,
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const normalizationStats = `-- name: NormalizationStats :many
@@ -487,9 +576,10 @@ func (q *Queries) QueueMergeCandidate(ctx context.Context, arg QueueMergeCandida
 
 const recordMerge = `-- name: RecordMerge :one
 INSERT INTO opportunity_merge (from_opportunity_id, into_opportunity_id, reason,
-                               confidence, source_rows_moved, merged_by)
-VALUES ($1,$2,$3,$4,$5,$6)
-RETURNING id, from_opportunity_id, into_opportunity_id, reason, confidence, source_rows_moved, merged_by, merged_at, undone_at
+                               confidence, source_rows_moved, merged_by,
+                               moved_source_ids)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+RETURNING id, from_opportunity_id, into_opportunity_id, reason, confidence, source_rows_moved, merged_by, merged_at, undone_at, moved_source_ids
 `
 
 type RecordMergeParams struct {
@@ -499,6 +589,7 @@ type RecordMergeParams struct {
 	Confidence        *float32
 	SourceRowsMoved   int32
 	MergedBy          string
+	MovedSourceIds    []pgtype.UUID
 }
 
 func (q *Queries) RecordMerge(ctx context.Context, arg RecordMergeParams) (OpportunityMerge, error) {
@@ -509,6 +600,7 @@ func (q *Queries) RecordMerge(ctx context.Context, arg RecordMergeParams) (Oppor
 		arg.Confidence,
 		arg.SourceRowsMoved,
 		arg.MergedBy,
+		arg.MovedSourceIds,
 	)
 	var i OpportunityMerge
 	err := row.Scan(
@@ -521,18 +613,66 @@ func (q *Queries) RecordMerge(ctx context.Context, arg RecordMergeParams) (Oppor
 		&i.MergedBy,
 		&i.MergedAt,
 		&i.UndoneAt,
+		&i.MovedSourceIds,
 	)
 	return i, err
+}
+
+const restoreMergedOpportunity = `-- name: RestoreMergedOpportunity :execrows
+UPDATE opportunity
+   SET merged_into = NULL, unmerged_at = now(), pipeline_state = 'deduped',
+       version = version + 1, attempts = 0, last_error = NULL,
+       next_attempt_at = now(), lease_until = NULL
+ WHERE id = $1 AND merged_into IS NOT NULL
+`
+
+// Makes the posting visible again and marks it as human-unmerged.
+//
+// unmerged_at is what stops dedup re-merging it on the next pass. Without it the
+// operator watches their un-merge undo itself: the posting becomes claimable, the
+// same block yields the same near-identical pair, and the heuristic wins.
+//
+// pipeline_state moves to 'deduped' rather than staying where it was, so the
+// posting resumes AFTER the dedupe stage and continues to enrichment on its own.
+func (q *Queries) RestoreMergedOpportunity(ctx context.Context, opportunityID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreMergedOpportunity, opportunityID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const restoreSourceRows = `-- name: RestoreSourceRows :execrows
+UPDATE opportunity_source
+   SET opportunity_id = $1,
+       merge_reason = NULL, merge_confidence = NULL, merged_by = NULL
+ WHERE id = ANY ($2::uuid[])
+`
+
+type RestoreSourceRowsParams struct {
+	BackToID     pgtype.UUID
+	SourceRowIds []pgtype.UUID
+}
+
+// Moves exactly the rows a merge moved back to the posting they came from, and
+// clears the merge provenance from them.
+func (q *Queries) RestoreSourceRows(ctx context.Context, arg RestoreSourceRowsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreSourceRows, arg.BackToID, arg.SourceRowIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const undoMerge = `-- name: UndoMerge :one
 UPDATE opportunity_merge SET undone_at = now()
  WHERE id = $1 AND undone_at IS NULL
-RETURNING id, from_opportunity_id, into_opportunity_id, reason, confidence, source_rows_moved, merged_by, merged_at, undone_at
+RETURNING id, from_opportunity_id, into_opportunity_id, reason, confidence, source_rows_moved, merged_by, merged_at, undone_at, moved_source_ids
 `
 
-// Reversal is a first-class operation, not a recovery script: a false merge
-// hides a real job, and someone will need to undo one under time pressure.
+// Marks the merge record reversed. One of three statements that make up an
+// un-merge; see internal/admin.Unmerge for the whole operation, which must run in
+// one transaction or a crash leaves a posting neither merged nor visible.
 func (q *Queries) UndoMerge(ctx context.Context, id pgtype.UUID) (OpportunityMerge, error) {
 	row := q.db.QueryRow(ctx, undoMerge, id)
 	var i OpportunityMerge
@@ -546,6 +686,7 @@ func (q *Queries) UndoMerge(ctx context.Context, id pgtype.UUID) (OpportunityMer
 		&i.MergedBy,
 		&i.MergedAt,
 		&i.UndoneAt,
+		&i.MovedSourceIds,
 	)
 	return i, err
 }

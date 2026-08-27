@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Xubair001/devsignal/internal/matching"
+	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
@@ -213,6 +214,15 @@ func marshalFeedItem(t *testing.T) string {
 		},
 		Priority: 78.5,
 		Channels: []string{"vector", "keyword"},
+	}, opportunity.Summary{
+		ID:    "11111111-1111-1111-1111-111111111111",
+		Title: "Senior Backend Engineer",
+		// A disclosed range, so the marshalled item contains real money and the
+		// assertions below are checking a populated item rather than an empty one.
+		Salary: &opportunity.Money{
+			MinMinor: 16000000, MaxMinor: ptr(int64(20000000)),
+			Currency: "USD", Period: "year",
+		},
 	}, map[string]State{}, 3)
 
 	b, err := json.Marshal(item)
@@ -230,4 +240,33 @@ func fieldByJSONTag(typ reflect.Type, tag string) (reflect.StructField, bool) {
 		}
 	}
 	return reflect.StructField{}, false
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// TestFeedItemCarriesLiveness is the display rule as a test.
+//
+// The daily feed may not show a posting whose open state is unknown, so the
+// field has to be present and non-optional. It was absent for the whole of step
+// 17: the matcher returned a ranking and nothing carried the posting, so a card
+// had no company, no salary and no way to say "verified open". A pointer or an
+// omitempty here would let that regress silently.
+func TestFeedItemCarriesLiveness(t *testing.T) {
+	f, ok := fieldByJSONTag(reflect.TypeOf(FeedItem{}), "posting")
+	if !ok {
+		t.Fatal("FeedItem has no posting: a feed card cannot show liveness")
+	}
+	if f.Type.Kind() == reflect.Pointer {
+		t.Error("posting is a pointer; an item without one must be dropped, not nulled")
+	}
+	if strings.Contains(f.Tag.Get("json"), "omitempty") {
+		t.Error("posting is omitempty, so liveness can vanish from a rendered card")
+	}
+
+	js := marshalFeedItem(t)
+	for _, want := range []string{"liveness", "verified_open", "checked_at", "salary"} {
+		if !strings.Contains(js, want) {
+			t.Errorf("feed item does not expose %q: %s", want, js)
+		}
+	}
 }

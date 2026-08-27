@@ -13,6 +13,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/embed"
 	"github.com/Xubair001/devsignal/internal/matching"
+	"github.com/Xubair001/devsignal/internal/opportunity"
 )
 
 // The feed's response types are the enforcement point for blueprint §3, the same
@@ -85,6 +86,14 @@ type FeedItem struct {
 	// Channels records how retrieval found it. Useful for support and for the
 	// admin surface; harmless to expose and it makes "why is this here" answerable.
 	Channels []string `json:"channels"`
+	// Posting is the read-side summary: company, location, salary, apply URL and
+	// liveness. Shared with the browse list rather than duplicated, so the two
+	// surfaces cannot drift.
+	//
+	// Not a pointer and not omitempty: an item without it must never reach the
+	// client, because the display rules forbid showing a posting in the daily
+	// feed whose open state is unknown. The handler drops such an item instead.
+	Posting opportunity.Summary `json:"posting"`
 }
 
 // FeedResponse is today's feed.
@@ -104,6 +113,10 @@ type FeedDiagnostics struct {
 	// Truncated says the candidate set hit its cap, so the feed is not an
 	// exhaustive view of what matched.
 	Truncated bool `json:"retrieval_truncated"`
+	// ClosedSinceScoring counts postings that ranked but closed or were merged
+	// away before the response was written. Reported rather than hidden: it is
+	// the difference between a quiet market and a stale score.
+	ClosedSinceScoring int `json:"closed_since_scoring"`
 }
 
 // ExcludedResponse answers "why am I not seeing X".
@@ -130,7 +143,10 @@ var embeddingVersion = embed.LocalVersion
 type Handler struct {
 	matcher *matching.Service
 	svc     *Service
-	log     Logger
+	// opps supplies the posting itself. The matcher returns a ranking; it does
+	// not return what a card has to show.
+	opps *opportunity.Service
+	log  Logger
 }
 
 // Logger is the subset of slog the handler needs.
@@ -140,8 +156,10 @@ type Logger interface {
 }
 
 // NewHandler builds the handler.
-func NewHandler(matcher *matching.Service, svc *Service, log Logger) *Handler {
-	return &Handler{matcher: matcher, svc: svc, log: log}
+func NewHandler(
+	matcher *matching.Service, svc *Service, opps *opportunity.Service, log Logger,
+) *Handler {
+	return &Handler{matcher: matcher, svc: svc, opps: opps, log: log}
 }
 
 // defaultFeedSize is what the product promises daily, which is also why
@@ -203,6 +221,43 @@ func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
 		state = map[string]State{}
 	}
 
+	// Rank order, minus what the user already dismissed, capped at what could
+	// possibly be shown.
+	//
+	// A dismissal is the user telling us to stop showing it. Honouring that is
+	// not optional: a feed that keeps returning something someone rejected
+	// teaches them their feedback does nothing.
+	//
+	// The cap is what keeps the posting lookup proportional to the page rather
+	// than to the candidate set — loading 188 rows to render 7 is the same waste
+	// the batched write fixed on the way in. The slack above `size` covers
+	// postings that closed between scoring and now.
+	ranked := make([]matching.Match, 0, size*2)
+	for _, m := range res.Matches {
+		if state[m.Opportunity.ID.String()].Dismissed {
+			continue
+		}
+		if len(ranked) >= size*2 {
+			break
+		}
+		ranked = append(ranked, m)
+	}
+
+	ids := make([]pgtype.UUID, 0, len(ranked))
+	for _, m := range ranked {
+		ids = append(ids, m.Opportunity.ID)
+	}
+	// The posting itself. This one does NOT degrade: an empty feed is a product
+	// statement — "nothing met your bar today" — and returning it because a
+	// query failed would be a manufactured signal. A 500 is honest; a quiet
+	// market that never happened is not.
+	postings, err := h.opps.SummariesByID(r.Context(), ids)
+	if err != nil {
+		h.log.Error("loading feed postings", "user_id", id.UserID.String(), "err", err)
+		writeErr(w, http.StatusInternalServerError, "could not build the feed")
+		return
+	}
+
 	out := FeedResponse{
 		Items: make([]FeedItem, 0, len(res.Matches)),
 		Diagnostics: FeedDiagnostics{
@@ -214,18 +269,20 @@ func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	shown := make([]matching.Match, 0, size)
-	for _, m := range res.Matches {
-		// A dismissal is the user telling us to stop showing it. Honouring that is
-		// not optional: a feed that keeps returning something someone rejected
-		// teaches them their feedback does nothing.
-		if state[m.Opportunity.ID.String()].Dismissed {
-			continue
-		}
+	for _, m := range ranked {
 		if len(shown) >= size {
 			break
 		}
+		// Closed or merged away between scoring and now. Dropping it is hard rule
+		// 9's mirror image: we never invent a closure, and we never serve one we
+		// already observed.
+		posting, ok := postings[m.Opportunity.ID.String()]
+		if !ok {
+			out.Diagnostics.ClosedSinceScoring++
+			continue
+		}
 		shown = append(shown, m)
-		out.Items = append(out.Items, toFeedItem(m, state, res.ProfileVersion))
+		out.Items = append(out.Items, toFeedItem(m, posting, state, res.ProfileVersion))
 	}
 
 	// Impressions are recorded AFTER the response is assembled and only for what
@@ -458,11 +515,15 @@ func (h *Handler) dismissReasons(w http.ResponseWriter, _ *http.Request) {
 
 // ------------------------------------------------------------------ mapping
 
-func toFeedItem(m matching.Match, state map[string]State, profileVersion int32) FeedItem {
+func toFeedItem(
+	m matching.Match, posting opportunity.Summary,
+	state map[string]State, profileVersion int32,
+) FeedItem {
 	st := state[m.Opportunity.ID.String()]
 	return FeedItem{
 		OpportunityID: m.Opportunity.ID.String(),
 		Title:         m.Opportunity.TitleRaw,
+		Posting:       posting,
 		Fit:           toFitView(m.Fit, profileVersion),
 		State: StateView{
 			Saved: st.Saved, Applied: st.Applied,
