@@ -17,6 +17,15 @@ linters:
     - nilerr
     - goconst
     - misspell
+  exclusions:
+    rules:
+      # goconst on a table-driven test is noise. The repeated strings ARE the
+      # fixture — naming a constant for each canonical slug in a resolution
+      # table makes the table harder to read, which is the opposite of the
+      # point. Correctness linters still run on tests.
+      - path: _test\.go
+        linters:
+          - goconst
 formatters:
   enable:
     - gofmt

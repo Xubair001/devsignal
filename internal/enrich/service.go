@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Xubair001/devsignal/internal/skill"
 	"github.com/Xubair001/devsignal/internal/store"
 )
 
@@ -30,11 +31,37 @@ type Service struct {
 	pool     *pgxpool.Pool
 	q        *store.Queries
 	provider Provider
+	// ontology normalizes the model's words onto our canonical vocabulary. Nil
+	// is tolerated — extraction still works and records the raw phrases — because
+	// a failure to load a word list must not stop the pipeline (hard rule 7).
+	ontology *skill.Ontology
 	log      *slog.Logger
 }
 
 func NewService(pool *pgxpool.Pool, p Provider, log *slog.Logger) *Service {
-	return &Service{pool: pool, q: store.New(pool), provider: p, log: log}
+	s := &Service{pool: pool, q: store.New(pool), provider: p, log: log}
+	o, err := skill.Load()
+	if err != nil {
+		// Loud, and non-fatal. Every extracted phrase becomes its own skill in
+		// this state, which degrades matching rather than breaking ingestion.
+		log.Error("skill ontology failed to load; extracted skills will not be "+
+			"normalized", "err", err)
+		return s
+	}
+	s.ontology = o
+	return s
+}
+
+// normalizedAlias is the lookup key stored in skill_alias.
+//
+// One function, used by both the seeder and extraction, so the two conventions
+// cannot drift. If they did, half the alias lookups would miss and the symptom
+// would be "matching got worse" with no obvious cause.
+func normalizedAlias(raw string) string {
+	if n := skill.Normalize(raw); n != "" {
+		return n
+	}
+	return strings.ToLower(strings.TrimSpace(raw))
 }
 
 // Outcome reports whether a call was actually paid for. Surfaced so the cache
@@ -132,23 +159,49 @@ func (s *Service) ApplySkills(ctx context.Context, oppID pgtype.UUID, result Res
 
 	seen := map[string]bool{}
 	for _, sk := range result.Skills {
-		slug := Slugify(sk.Name)
+		// Resolve against the committed vocabulary FIRST.
+		//
+		// Without this step the model's own words become the skill: "Go",
+		// "Golang" and "Go (Golang)" each got their own row, and the skill
+		// factors could then never match a profile. Measured before the ontology
+		// existed: 10 postings produced 91 distinct skills with almost no
+		// overlap, so 45 of the fit model's 100 points were unreachable even
+		// with extraction working perfectly.
+		slug, resolved := sk.Name, false
+		display := strings.TrimSpace(sk.Name)
+		version := OntologyVersion
+		if s.ontology != nil {
+			if canonical, ok := s.ontology.Resolve(sk.Name); ok {
+				slug, resolved = canonical, true
+				version = skill.OntologyVersion
+			}
+		}
+		if !resolved {
+			// Unknown to the vocabulary. Kept as its own skill rather than
+			// discarded: we paid for this evidence, and an unresolved phrase is a
+			// candidate for the vocabulary. It carries the EXTRACTED ontology
+			// version, which is what makes `--role=skills --unresolved` able to
+			// list exactly these for review.
+			slug = Slugify(sk.Name)
+		}
 		if slug == "" || seen[slug+"|"+sk.Level] {
 			continue
 		}
 		seen[slug+"|"+sk.Level] = true
 
 		skillID, err := q.UpsertSkillByAlias(ctx, store.UpsertSkillByAliasParams{
-			Alias: sk.Name, Slug: slug,
-			DisplayName: strings.TrimSpace(sk.Name), OntologyVersion: OntologyVersion,
+			Alias: normalizedAlias(sk.Name), Slug: slug,
+			DisplayName: display, OntologyVersion: version,
 		})
 		if err != nil {
 			return fmt.Errorf("resolving skill %q: %w", sk.Name, err)
 		}
-		// Record the alias so the next posting writing it differently resolves to
-		// the same skill without another round trip.
+		// Record the NORMALIZED alias, so the next posting writing it differently
+		// resolves to the same skill without another round trip. Normalized
+		// because the seeded aliases are, and two conventions in one column means
+		// half the lookups miss.
 		if err := q.LinkSkillAlias(ctx, store.LinkSkillAliasParams{
-			SkillID: skillID, Alias: sk.Name,
+			SkillID: skillID, Alias: normalizedAlias(sk.Name),
 		}); err != nil {
 			return fmt.Errorf("linking alias %q: %w", sk.Name, err)
 		}
@@ -158,7 +211,7 @@ func (s *Service) ApplySkills(ctx context.Context, oppID pgtype.UUID, result Res
 		mid := modelID
 		if err := q.InsertOpportunitySkill(ctx, store.InsertOpportunitySkillParams{
 			OpportunityID: oppID, SkillID: skillID, RequirementLevel: sk.Level,
-			ExtractionConfidence: &conf, OntologyVersion: OntologyVersion,
+			ExtractionConfidence: &conf, OntologyVersion: version,
 			ModelID: &mid, PromptVersion: &pv,
 		}); err != nil {
 			return fmt.Errorf("inserting skill: %w", err)

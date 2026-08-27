@@ -11,6 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"strings"
+
+	"github.com/Xubair001/devsignal/internal/skill"
 	"github.com/Xubair001/devsignal/internal/store"
 	"github.com/Xubair001/devsignal/pkg/blob"
 )
@@ -49,6 +52,29 @@ type Input struct {
 	SalaryCurrency        *string
 	SalaryPeriod          *string
 	WorkAuthorization     []byte
+	// Skills is nil when the caller is not editing skills at all, and an empty
+	// slice when they are clearing them. The distinction matters: a client that
+	// PUTs a profile form without a skills field must not silently wipe the
+	// user's skills.
+	Skills []SkillInput
+}
+
+// SkillInput is one user-claimed skill.
+type SkillInput struct {
+	Name        string
+	Proficiency *int16
+	Years       *int16
+}
+
+// SkillResult reports what happened to each submitted skill name.
+//
+// Unrecognised names are returned rather than dropped or invented. The profile
+// deliberately cannot mint new skills — see ProfileSkillByAlias — so the user has
+// to be told which of their words we could not place, or their skill silently
+// does not count toward any match and they have no way to find out.
+type SkillResult struct {
+	Saved      []string
+	Unresolved []string
 }
 
 func (s *Service) Save(ctx context.Context, userID, tenantID pgtype.UUID, in Input) (store.Profile, error) {
@@ -88,6 +114,67 @@ func (s *Service) Save(ctx context.Context, userID, tenantID pgtype.UUID, in Inp
 	// user_id only. A profile is PII and none of its content belongs in a log.
 	s.log.Info("profile saved", "user_id", userID.String(), "profile_version", p.ProfileVersion)
 	return p, nil
+}
+
+// SaveSkills replaces the user's manually-entered skills.
+//
+// Resolution goes through the same ontology extraction uses, which is the whole
+// point: a profile saying "Golang" and a posting saying "Go" have to reach the
+// same row or the skill factors can never match. Before the ontology existed
+// they could not — 10 postings produced 91 distinct skills with no overlap.
+func (s *Service) SaveSkills(
+	ctx context.Context, userID pgtype.UUID, in []SkillInput,
+) (*SkillResult, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	if _, err := q.DeleteManualProfileSkills(ctx, userID); err != nil {
+		return nil, fmt.Errorf("clearing manual skills: %w", err)
+	}
+
+	res := &SkillResult{}
+	seen := map[string]bool{}
+	for _, sk := range in {
+		name := strings.TrimSpace(sk.Name)
+		if name == "" {
+			continue
+		}
+		row, err := q.ProfileSkillByAlias(ctx, skill.Normalize(name))
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				res.Unresolved = append(res.Unresolved, name)
+				continue
+			}
+			return nil, fmt.Errorf("resolving skill %q: %w", name, err)
+		}
+		if seen[row.Slug] {
+			continue
+		}
+		seen[row.Slug] = true
+
+		if err := q.UpsertProfileSkill(ctx, store.UpsertProfileSkillParams{
+			UserID: userID, SkillID: row.ID, Origin: "manual",
+			Proficiency: sk.Proficiency, Years: sk.Years,
+		}); err != nil {
+			return nil, fmt.Errorf("saving skill %q: %w", name, err)
+		}
+		res.Saved = append(res.Saved, row.DisplayName)
+	}
+
+	// The profile version bump is what invalidates cached fit scores. A skill
+	// change absolutely moves a score, so it is not optional — and it is done in
+	// the same transaction as the change so the two cannot disagree.
+	if err := q.TouchProfileVersion(ctx, userID); err != nil {
+		return nil, fmt.Errorf("bumping profile version: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func (s *Service) Get(ctx context.Context, userID pgtype.UUID) (store.Profile, []store.ListProfileSkillsRow, error) {

@@ -165,3 +165,12 @@ UPDATE digest_send
    AND local_date = sqlc.arg(local_date)
    AND outcome <> 'sent'
 RETURNING *;
+
+-- name: ListDigestSends :many
+-- The user's own digest history, newest first. Answers "why did I not get a
+-- digest yesterday" with the recorded reason rather than a shrug.
+SELECT local_date, outcome, reason, item_count, sent_at, attempts
+  FROM digest_send
+ WHERE user_id = sqlc.arg(user_id)
+ ORDER BY local_date DESC
+ LIMIT sqlc.arg(max_rows)::int;

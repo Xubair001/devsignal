@@ -105,3 +105,21 @@ export function SectionHead({
     </div>
   );
 }
+
+/** A missing route. Says what to do, not just what went wrong. */
+export function NotFound() {
+  return (
+    <div className="grid place-items-center py-20 text-center">
+      <div className="max-w-[40ch]">
+        <p className="font-mono text-[13px] text-ink-3">404</p>
+        <h1 className="mt-2 text-[19px] font-bold tracking-[-0.02em]">
+          That page does not exist
+        </h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
+          Press <kbd className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[11px]">⌘K</kbd>{' '}
+          to jump to any section.
+        </p>
+      </div>
+    </div>
+  );
+}

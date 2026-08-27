@@ -143,6 +143,22 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 	return i, err
 }
 
+const deleteManualProfileSkills = `-- name: DeleteManualProfileSkills :execrows
+DELETE FROM profile_skill WHERE user_id = $1 AND origin = 'manual'
+`
+
+// Clears only the skills the USER typed, leaving resume- and github-derived ones
+// intact. A manual edit means "this is my list of what I claim by hand", not
+// "discard everything we inferred from my documents" — and the origin column
+// exists precisely so the two can be told apart.
+func (q *Queries) DeleteManualProfileSkills(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteManualProfileSkills, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteProfileData = `-- name: DeleteProfileData :execrows
 DELETE FROM profile WHERE user_id = $1
 `
@@ -525,6 +541,34 @@ func (q *Queries) ListUserResumes(ctx context.Context, userID pgtype.UUID) ([]Re
 		return nil, err
 	}
 	return items, nil
+}
+
+const profileSkillByAlias = `-- name: ProfileSkillByAlias :one
+SELECT s.id, s.canonical_slug::text AS slug, s.display_name
+  FROM skill_alias a JOIN skill s ON s.id = a.skill_id
+ WHERE a.alias = $1::citext
+ LIMIT 1
+`
+
+type ProfileSkillByAliasRow struct {
+	ID          pgtype.UUID
+	Slug        string
+	DisplayName string
+}
+
+// Resolves a user-typed skill name against the ontology.
+//
+// Alias-only, with NO create path, and that asymmetry with extraction is
+// deliberate. An extracted phrase is evidence from a posting and is worth
+// keeping even unrecognised; a user's typo is not evidence of anything, and
+// letting the profile mint skills would fill the vocabulary with one-off spellings
+// that then never match a posting. Unrecognised input is reported back to the
+// user instead.
+func (q *Queries) ProfileSkillByAlias(ctx context.Context, alias string) (ProfileSkillByAliasRow, error) {
+	row := q.db.QueryRow(ctx, profileSkillByAlias, alias)
+	var i ProfileSkillByAliasRow
+	err := row.Scan(&i.ID, &i.Slug, &i.DisplayName)
+	return i, err
 }
 
 const putProfileEmbedding = `-- name: PutProfileEmbedding :exec

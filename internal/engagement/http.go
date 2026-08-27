@@ -469,9 +469,28 @@ func (h *Handler) listSaved(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "could not list saved postings")
 		return
 	}
+	// The posting, for the same reason the feed needs it (hard rule 27): a list of
+	// ids is not a list a person can read. This was ids and timestamps only, so a
+	// saved-items screen had no title, no company, no apply link and no way to
+	// say whether the role is still open — which is the one thing a saved list is
+	// for, because a save is a decision revisited days later.
+	ids := make([]pgtype.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.OpportunityID)
+	}
+	postings, perr := h.opps.SummariesByID(r.Context(), ids)
+	if perr != nil {
+		h.log.Error("loading saved postings", "user_id", id.UserID.String(), "err", perr)
+		writeErr(w, http.StatusInternalServerError, "could not list saved postings")
+		return
+	}
+
 	type savedItem struct {
 		OpportunityID string    `json:"opportunity_id"`
 		SavedAt       time.Time `json:"saved_at"`
+		// Posting is a value, not a pointer: an entry we cannot describe is
+		// dropped rather than sent half-populated.
+		Posting opportunity.Summary `json:"posting"`
 	}
 	out := struct {
 		Items []savedItem `json:"items"`
@@ -479,13 +498,29 @@ func (h *Handler) listSaved(w http.ResponseWriter, r *http.Request) {
 		// inserted between pages, which for a save list means silently skipping
 		// something the user saved.
 		NextBefore *time.Time `json:"next_before"`
+		// Closed counts saves whose posting is gone — closed, merged away, or
+		// purged with its source. Reported rather than hidden: a shrinking saved
+		// list with no explanation looks like data loss.
+		Closed int `json:"closed_since_saved"`
 	}{Items: make([]savedItem, 0, len(rows))}
 
 	for _, row := range rows {
-		out.Items = append(out.Items, savedItem{row.OpportunityID.String(), row.SavedAt.Time})
+		posting, ok := postings[row.OpportunityID.String()]
+		if !ok {
+			out.Closed++
+			continue
+		}
+		out.Items = append(out.Items, savedItem{
+			OpportunityID: row.OpportunityID.String(),
+			SavedAt:       row.SavedAt.Time,
+			Posting:       posting,
+		})
 	}
-	if len(out.Items) > 0 {
-		out.NextBefore = &out.Items[len(out.Items)-1].SavedAt
+	// The cursor comes from the last row READ, not the last row shown: paging on
+	// a filtered timestamp would re-fetch the dropped entries forever.
+	if len(rows) > 0 {
+		last := rows[len(rows)-1].SavedAt.Time
+		out.NextBefore = &last
 	}
 	writeJSON(w, http.StatusOK, out)
 }

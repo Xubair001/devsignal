@@ -35,6 +35,11 @@ quality. Behavioural labels replace the rubric at step 17.
 behavioural evaluation set that will replace the rubric labels, and the ranking decision record
 blueprint §32 requires. Nothing there updates or deletes — un-saving appends.
 
+The console covers nine routes now, not four: sign-in, today's feed, saved, the corpus browser and
+posting detail, profile (preferences, skills, resume upload, verified erasure), notification
+settings with the digest history, plus the operations surfaces — overview, sources, merge review
+and flags.
+
 `/internal/admin` is the operations surface: source health with a quarantine toggle, full
 provenance with a working un-merge, the merge-candidate and listing-flag review queues, re-run
 controls, and a source purge that counts before it deletes. Admin is a role on `app_user`,
@@ -100,10 +105,33 @@ assumed:
 name and hard rule 8 makes that string the determinism guarantee. `--role=spend` reports cost per
 model id per lane.
 
-**The 45 skill points still do not score, and extraction was only half the blocker.** `profile_skill`
-has an upsert and a read but **no writer anywhere in the product** — resume ingestion extracts text,
-not skills. Posting skills now exist; the profile side is empty, and `required_skills` needs both.
-Extracting profile skills from resume text is the missing piece, and it is now possible. Scaling past the two boards currently
+**The 45 skill points now score.** Extraction was only half the blocker; the other two halves were
+an ontology and a way to write profile skills, and both are built:
+
+- `internal/skill` normalizes the model's words onto a canonical vocabulary. Without it "Go",
+  "Golang" and "Go (Golang)" were three rows and could never match a profile — measured: 10
+  postings produced 91 distinct skills with almost no overlap. `Normalize` is where the difficulty
+  is, because `+`, `#` and `.` carry meaning ("C++" is not "C", ".NET" is not "net") while every
+  other punctuation mark does not. `Load` validates the hand-edited file and refuses a duplicate
+  slug, an alias bound to two skills, or an edge to a slug that does not exist — it caught a real
+  conflict on first run.
+- `PUT /api/v1/profile` accepts skills, resolved through the **same** ontology. The profile
+  deliberately **cannot mint** new skills: a typo would become a vocabulary entry that then matches
+  no posting, so unrecognised names come back in `unresolved_skills` and are shown struck through.
+  Extraction is the asymmetric case — an unrecognised phrase there is evidence from a posting and
+  is kept.
+
+Verified end to end: "Golang" → Go, "K8s" → Kubernetes, "Postgres" → PostgreSQL, "CI/CD" → cicd,
+and `--role=match` now reports `+12 of 35 from required skills (1 of 3 required skills)` with
+coverage at 90 of 100 points instead of 45. Bands read "Stretch" rather than "Not enough
+information".
+
+`--role=skills` seeds the vocabulary, `--unresolved` ranks the phrases it does not know by how many
+postings use them (the evidence-driven growth path — a phrase on forty postings is worth adding, one
+on a single posting is noise), and `--demand` snapshots `skill_demand_daily`, which had **no writer
+at all** before this. It is a recomputed snapshot rather than an incrementing counter: a counter
+would double-count every re-extraction and drift with nothing to audit against, and this is the one
+series in the system that cannot be rebuilt. Scaling past the two boards currently
 registered is blocked on the Tier-A source list, not on code — `add-sources` takes a file.
 
 Erasure is real and `make check-erasure` proves it. The one part still open is BACKUPS: either
@@ -155,7 +183,7 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/pipeline/` | Work queue, state machine, sweeper, leases. The spine every worker plugs into |
 | `internal/opportunity/` | Canonical model, provenance, normalization, dedup, liveness |
 | `internal/company/` | Entity resolution on registrable domain, alias table |
-| `internal/skill/` | Ontology, aliases, edges, demand time-series writes. **Planned, not built** — the tables exist from migration 000004 and have no writer |
+| `internal/skill/` | Ontology (264 canonical skills, 623 normalized aliases, 81 edges), alias resolution, the demand time-series writer |
 | `internal/enrich/` | Extraction, embeddings, the content-hash cache, hot/cold lanes |
 | `internal/matching/` | Eligibility gate, retrieval, fit scoring, explanation |
 | `internal/engagement/` | Feed, saves, applications, dismissals |
@@ -317,7 +345,21 @@ blueprint's audit found.
     "verified open". Because the client's DTOs are hand-written, neither compiler noticed.
     `internal/apicontract` is the guard: a reflection test over every json path the console reads,
     which fails on a rename. Fetch the postings for the page, not for the candidate set —
-    loading 188 rows to render 7 cost 40 ms of the cold p95.
+    loading 188 rows to render 7 cost 40 ms of the cold p95. The same applies to the saved list,
+    which was ids and timestamps only — and a save is revisited days later, which is exactly when
+    liveness matters most.
+
+29. **A posting body is third-party HTML and is sanitized at the serve boundary.**
+    `opportunity.description_text` holds the board's bytes verbatim — every row in the corpus
+    starts with a `<div>` — and it was served as `description_html` with no filtering at all. A
+    client rendering that is stored XSS: a script in an employer's own posting would run with an
+    operator's session. `opportunity.SanitizeDescription` runs an allow-list (bluemonday) over it,
+    and the tests cover ten vectors a tag blocklist misses — `img onerror`, `javascript:` and
+    `data:` URLs, inline handlers, `<style>`, `<form>`, `<svg><animate onbegin>`, `<object>`.
+    Serve-time and not ingest-time on purpose: sanitizing on the way in would change the content
+    hash, invalidate every cached extraction, and destroy the answer to "what did the board
+    actually publish". `class`, `id` and `style` are stripped along with the rest, so third-party
+    markup cannot reshape the page around itself.
 
 28. **The bar for interrupting someone is a BAND, and "Not enough information" clears none of
     them.** The digest's minimum is `strong` or `worth_a_look`, never a numeric threshold: hard

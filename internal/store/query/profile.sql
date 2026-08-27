@@ -196,3 +196,24 @@ SELECT pe.embedding, pe.embedding_model, pe.profile_version AS embedded_profile_
 -- a problem for everyone else.
 UPDATE opportunity_flag SET reported_by = NULL
  WHERE reported_by = sqlc.arg(user_id);
+
+-- name: DeleteManualProfileSkills :execrows
+-- Clears only the skills the USER typed, leaving resume- and github-derived ones
+-- intact. A manual edit means "this is my list of what I claim by hand", not
+-- "discard everything we inferred from my documents" — and the origin column
+-- exists precisely so the two can be told apart.
+DELETE FROM profile_skill WHERE user_id = $1 AND origin = 'manual';
+
+-- name: ProfileSkillByAlias :one
+-- Resolves a user-typed skill name against the ontology.
+--
+-- Alias-only, with NO create path, and that asymmetry with extraction is
+-- deliberate. An extracted phrase is evidence from a posting and is worth
+-- keeping even unrecognised; a user's typo is not evidence of anything, and
+-- letting the profile mint skills would fill the vocabulary with one-off spellings
+-- that then never match a posting. Unrecognised input is reported back to the
+-- user instead.
+SELECT s.id, s.canonical_slug::text AS slug, s.display_name
+  FROM skill_alias a JOIN skill s ON s.id = a.skill_id
+ WHERE a.alias = sqlc.arg(alias)::citext
+ LIMIT 1;

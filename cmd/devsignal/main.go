@@ -29,6 +29,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/admin"
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
+	"github.com/Xubair001/devsignal/internal/digest"
 	"github.com/Xubair001/devsignal/internal/embed"
 	"github.com/Xubair001/devsignal/internal/engagement"
 	"github.com/Xubair001/devsignal/internal/enrich"
@@ -62,7 +63,7 @@ func main() {
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
 			"spend | retrieve | match | eval | reindex-profiles | "+
 			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest | "+
-			"digest-optin")
+			"digest-optin | skills")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -75,6 +76,10 @@ func main() {
 		"eval: overwrite the committed baseline with this run (a reviewed act)")
 	dryRun := flag.Bool("dry-run", false,
 		"digest: compose and print, claim no day and send nothing")
+	unresolved := flag.Bool("unresolved", false,
+		"skills: list extracted phrases the vocabulary does not know")
+	demand := flag.Bool("demand", false,
+		"skills: snapshot today's skill demand instead of seeding")
 	timezone := flag.String("timezone", "UTC",
 		"digest-optin: the user's IANA timezone, e.g. Europe/London")
 	minBand := flag.String("min-band", "strong",
@@ -86,6 +91,7 @@ func main() {
 		email: *email, recordBaseline: *recordBaseline,
 		users: *users, concurrency: *concurrency, duration: *duration,
 		dryRun: *dryRun, timezone: *timezone, minBand: *minBand,
+		unresolved: *unresolved, demand: *demand,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -109,6 +115,8 @@ type flags struct {
 	dryRun         bool
 	timezone       string
 	minBand        string
+	unresolved     bool
+	demand         bool
 }
 
 func run(role string, f flags) error {
@@ -187,6 +195,8 @@ func run(role string, f flags) error {
 		return digestRun(ctx, cfg, log, pool, f)
 	case "digest-optin":
 		return digestOptIn(ctx, cfg, log, pool, f)
+	case "skills":
+		return skillsRun(ctx, cfg, log, pool, f)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
 	}
@@ -285,6 +295,7 @@ func buildRouter(
 
 	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
 	feedH := engagement.NewHandler(matcher, engagementSvc, oppSvc, log)
+	digestH := digest.NewHandler(pool, log)
 	adminH := admin.NewHandler(admin.New(pool, log), log)
 	sloH := admin.NewSLOHandler(pool, log)
 
@@ -321,6 +332,9 @@ func buildRouter(
 			// Reporting a listing is a user action, not an admin one, so it lives
 			// under the user API rather than behind the admin gate.
 			priv.Mount("/listings", adminH.FlagRoutes())
+			// Notification settings and the digest history. The caller's own data,
+			// so it reads identity from the context like everything else here.
+			priv.Mount("/notifications", digestH.Routes())
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {

@@ -59,6 +59,14 @@ export function token(): string | null {
   return (import.meta.env.VITE_DEV_TOKEN as string | undefined) ?? null;
 }
 
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Nothing to do. The next request 401s, which is the correct outcome.
+  }
+}
+
 export function setToken(value: string): void {
   try {
     localStorage.setItem(TOKEN_KEY, value.trim());
@@ -73,7 +81,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       Accept: 'application/json',
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      // Only for a JSON body. FormData must be left alone: the browser
+      // generates the multipart boundary, and setting the header by hand
+      // produces a body the server cannot parse.
+      ...(init?.body && !(init.body instanceof FormData)
+        ? { 'Content-Type': 'application/json' }
+        : {}),
       ...(t ? { Authorization: `Bearer ${t}` } : {}),
       ...init?.headers,
     },
@@ -93,5 +106,14 @@ export const http = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /**
+   * Multipart upload. Content-Type is deliberately NOT set: the browser has to
+   * generate the multipart boundary, and setting it by hand produces a body the
+   * server cannot parse.
+   */
+  upload: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: 'POST', body: form }),
 };

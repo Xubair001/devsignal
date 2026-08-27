@@ -2,11 +2,22 @@ import { http } from './client';
 import type {
   FlagsResponse,
   HealthResponse,
+  MergeCandidatesResponse,
   SloResponse,
   SourcesResponse,
 } from './types';
 
 export const adminApi = {
+  mergeCandidates: () =>
+    http.get<MergeCandidatesResponse>('/internal/admin/merge-candidates'),
+  /**
+   * Resolving a candidate records a human judgement on a merge dedup declined to
+   * make automatically. Only 'merged' and 'rejected' are accepted — verified
+   * against admin.MergeConfirmed / MergeRejected, not guessed.
+   */
+  resolveMerge: (id: string, resolution: 'merged' | 'rejected', note: string) =>
+    http.post<unknown>(`/internal/admin/merge-candidates/${id}/resolve`, { resolution, note }),
+
   slo: () => http.get<SloResponse>('/internal/admin/slo'),
   sources: () => http.get<SourcesResponse>('/internal/admin/sources'),
   health: (id: string, days = 30) =>

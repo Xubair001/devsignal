@@ -64,8 +64,36 @@ sighting — never the employer's claimed post date, which boards refresh.
 **5. Nothing is computed here.** No score, no band, no eligibility. Two clients that derive a
 number will disagree with each other and with the backend's decision log.
 
+**6. A skill the ontology cannot place is shown, not dropped.** The profile deliberately cannot
+mint new skills — a typo would become a vocabulary entry that then matches no posting — so
+`unresolved_skills` comes back from the server and those names render struck through with an
+explanation. Silently dropping one would leave the user believing a skill counts when it counts
+toward nothing.
+
+**7. The posting body is rendered as HTML, and that is only safe because the server filters it.**
+`description_html` is third-party content from a board anyone can post to. It is sanitized
+server-side through an allow-list before it is served (see hard rule 29); rendering it here without
+that would be stored XSS.
+
 Meaning is never carried by colour alone: every `Pill` tone ships a glyph, and the fit ledger has an
 `sr-only` table fallback because the breakdown is the product's core claim.
+
+## Routes
+
+| Route | What it is |
+|---|---|
+| `/feed` | Today's feed with the fit ledger, save/apply, dismiss-with-reason |
+| `/saved` | Saved roles, each with its current liveness state |
+| `/browse`, `/browse/:id` | The corpus, filtered and keyset-paginated, plus posting detail |
+| `/profile` | Preferences, skills, resume upload, account erasure |
+| `/settings` | Digest consent, quiet hours, caps, minimum band, send history |
+| `/` | Operations overview: SLOs, pipeline state, liveness recency |
+| `/sources` | Source table with yield, quarantine and purge |
+| `/merges` | Merge candidates dedup withheld for a human |
+| `/flags` | The listing-flag queue |
+
+Sign-in is a gate in `AppShell`: no page mounts against a 401, because a screen that fires four
+queries and then shows four error cards is worse than one login form.
 
 ## Structure
 

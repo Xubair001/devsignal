@@ -241,3 +241,148 @@ export type AdminFlag = {
 };
 
 export type FlagsResponse = { flags: AdminFlag[] };
+
+/* ---------------------------------------------------------------- profile --- */
+
+export type ProfileSkill = {
+  slug: string;
+  name: string;
+  /** Where the claim came from. A resume-derived skill is not a typed one. */
+  origin: 'manual' | 'resume' | 'github';
+  proficiency: number | null;
+  years: number | null;
+};
+
+export type Profile = {
+  headline: string | null;
+  years_experience: number | null;
+  seniority: string | null;
+  is_management: boolean;
+  target_role_families: string[];
+  target_countries: string[];
+  work_mode_preference: string | null;
+  target_employment_types: string[];
+  languages: string[];
+  min_salary: { min_minor: number; currency: string; period: string } | null;
+  work_authorization: Record<string, string> | null;
+  skills: ProfileSkill[];
+  /** Lets a client tell whether a fit score it holds is still current. */
+  profile_version: number;
+  /**
+   * Skill names the ontology could not place. Returned rather than dropped: the
+   * profile cannot mint new skills, so an unrecognised name counts toward
+   * nothing and the user has to be told which one.
+   */
+  unresolved_skills?: string[];
+};
+
+export type ProfileInput = {
+  headline: string | null;
+  years_experience: number | null;
+  seniority: string | null;
+  is_management: boolean;
+  target_role_families: string[];
+  target_countries: string[];
+  work_mode_preference: string | null;
+  target_employment_types: string[];
+  languages: string[];
+  min_salary_minor: number | null;
+  salary_currency: string | null;
+  salary_period: string | null;
+  work_authorization: Record<string, string> | null;
+  /** Absent means "not editing skills". [] means "clear them". */
+  skills?: { name: string; proficiency: number | null; years: number | null }[];
+};
+
+export type Resume = {
+  id: string;
+  filename: string | null;
+  size_bytes: number;
+  text_chars: number | null;
+  parse_state: string;
+  parse_error: string | null;
+  uploaded_at: string;
+  /* Object keys and extracted text are deliberately absent from the API. */
+};
+
+/** The handler wraps this as `items`, not `resumes`. */
+export type ResumesResponse = { items: Resume[] };
+
+/* ------------------------------------------------------------ corpus read --- */
+
+export type OpportunityPage = { items: Posting[]; next_cursor?: string };
+
+export type OpportunityDetail = Posting & {
+  description_html: string | null;
+  open_similar_roles_at_company: number;
+};
+
+/* ----------------------------------------------------------------- saved --- */
+
+export type SavedItem = {
+  opportunity_id: string;
+  saved_at: string;
+  posting: Posting;
+};
+
+export type SavedResponse = {
+  items: SavedItem[];
+  next_before: string | null;
+  /** Saves whose posting is gone. Shown, so a shrinking list is explained. */
+  closed_since_saved: number;
+};
+
+/* --------------------------------------------------------- notifications --- */
+
+export type NotificationSettings = {
+  timezone: string;
+  quiet_start: number;
+  quiet_end: number;
+  digest_enabled: boolean;
+  max_per_week: number;
+  min_band: 'strong' | 'worth_a_look';
+  send_when_empty: boolean;
+  consent_at: string | null;
+  consent_wording_version: string | null;
+  consent_withdrawn_at: string | null;
+  /** False when no row exists: "never asked" is not "said no". */
+  configured: boolean;
+};
+
+export type DigestSend = {
+  local_date: string;
+  outcome: string;
+  reason: string | null;
+  item_count: number;
+  sent_at: string | null;
+  attempts: number;
+};
+
+export type DigestHistory = { sends: DigestSend[] };
+
+/* ------------------------------------------------------------------ auth --- */
+
+export type Session = { user_id: string; tenant_id: string };
+
+export type LoginResponse = {
+  session_token: string;
+  refresh_token: string;
+  /** RFC 3339 UTC. */
+  expires_at: string;
+};
+
+/* ----------------------------------------------------------- merge queue --- */
+
+export type MergeCandidate = {
+  id: string;
+  left_opportunity_id: string;
+  right_opportunity_id: string;
+  left_title: string;
+  right_title: string;
+  reason: string;
+  confidence: number;
+  withheld_because: string;
+  created_at: string;
+};
+
+export type MergeCandidatesResponse = { candidates: MergeCandidate[] };

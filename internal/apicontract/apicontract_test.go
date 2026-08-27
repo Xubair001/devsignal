@@ -101,6 +101,26 @@ func init() {
 		"items.opportunity_id", "items.title", "items.failed_checks", "items.reasons",
 	)
 
+	// The corpus browser and the detail page.
+	consumed["opportunity"] = paths(reflect.TypeOf(opportunity.Detail{}),
+		"id", "title", "company.name", "company.domain_confirmed",
+		"role.family", "role.seniority", "role.is_management",
+		"location.city", "location.country", "location.work_mode", "location.geo_scope",
+		"salary", "apply_url", "language", "visa_sponsorship",
+		"liveness.verified_open", "liveness.checked_at", "liveness.first_seen_at",
+		"liveness.days_open", "liveness.source_claims_posted_at",
+		"signals.ghost_risk", "signals.ghost_risk_reasons",
+		"signals.times_refreshed", "signals.sources_seen_on",
+		// Sanitized server-side before it reaches a client. The console renders it
+		// as HTML, so a rename here would either blank the description or, worse,
+		// point at a field that was never filtered.
+		"description_html", "open_similar_roles_at_company",
+	)
+
+	consumed["page"] = paths(reflect.TypeOf(opportunity.Page{}),
+		"items.id", "items.title", "next_cursor",
+	)
+
 	consumed["money"] = paths(reflect.TypeOf(opportunity.Money{}),
 		// Minor units and the currency, never a formatted string: formatting
 		// depends on a locale the API does not know.

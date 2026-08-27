@@ -188,8 +188,10 @@ func (s *Service) Get(ctx context.Context, id string) (*Detail, error) {
 	}
 
 	return &Detail{
-		Summary:                   sum,
-		DescriptionHTML:           r.DescriptionText,
+		Summary: sum,
+		// Sanitized here, at the boundary where it becomes a client's problem.
+		// The stored column holds the board's bytes verbatim; see sanitize.go.
+		DescriptionHTML:           SanitizeDescription(r.DescriptionText),
 		OpenSimilarRolesAtCompany: int(similar),
 	}, nil
 }

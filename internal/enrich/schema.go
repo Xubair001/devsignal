@@ -10,7 +10,7 @@ package enrich
 // else may.
 const (
 	// PromptVersion changes when the instruction text changes.
-	PromptVersion = "p-2026-08-24"
+	PromptVersion = "p-2026-08-27"
 	// SchemaVersion changes when the output shape changes.
 	SchemaVersion = "s-2026-08-24"
 )
@@ -154,6 +154,20 @@ Rules:
   empty.
 - skills: name the technology or competency as the posting writes it. Do not
   translate to a canonical form and do not add skills that are merely implied.
+- A skill is something a person can be said to HAVE: a named technology, tool,
+  platform, language, protocol, standard, certification, or a named methodology
+  or domain of expertise. Include it as the posting writes it.
+  Do NOT list, as skills:
+    * generic activity or department nouns - "sales", "marketing", "design",
+      "engineering", "product", "automation", "documentation" on its own,
+      "demos", "logs", "meetings", "collaboration", "communication"
+    * responsibilities or artifacts - "hands-on labs", "partner portals",
+      "customer meetings", "quarterly reviews". Those belong in
+      responsibilities, not skills.
+    * the hiring company's own name or products, unless the posting requires
+      prior experience with them
+  A phrase you would not write on a CV under "Skills" is not a skill here. When
+  in doubt, leave it out: an omitted skill costs less than an invented one.
 - level is "required" only if the posting requires it, "preferred" for
   nice-to-haves, "mentioned" for anything named without either framing.
 - responsibilities and requirements: short verbatim-ish phrases, not prose.
