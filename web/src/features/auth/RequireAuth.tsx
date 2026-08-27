@@ -16,7 +16,7 @@ export function RequireAuth() {
   if (loading) {
     return (
       <div className="grid min-h-dvh place-items-center">
-        <p className="text-[13px] text-ink-3">Checking your session…</p>
+        <p className="text-body text-ink-3">Checking your session…</p>
       </div>
     );
   }
@@ -37,7 +37,7 @@ export function RequireAuth() {
  * so a bookmarked admin URL degrades into a clear message instead of four failed
  * queries.
  *
- * It answers with the same "does not exist" language the API uses, deliberately:
+ * It answers with the same"does not exist" language the API uses, deliberately:
  * telling someone a page exists but is forbidden is information they did not
  * have, and the two surfaces should not disagree about what they reveal.
  */
@@ -49,11 +49,11 @@ export function RequireAdmin() {
     return (
       <div className="grid place-items-center py-20 text-center">
         <div className="max-w-[44ch]">
-          <p className="font-mono text-[13px] text-ink-3">404</p>
-          <h1 className="mt-2 text-[19px] font-bold tracking-[-0.02em]">
+          <p className="font-mono text-body text-ink-3">404</p>
+          <h1 className="mt-2 text-title font-bold tracking-[-0.02em]">
             That page does not exist
           </h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
+          <p className="mt-2 text-body leading-relaxed text-ink-3">
             The operations surfaces — sources, merge review and the flag queue — are available to
             accounts with the operator role. Ask whoever runs this instance; it is granted from
             the binary, never from a session, so a compromised login cannot mint one.

@@ -36,11 +36,11 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
   const ghost = p.signals.ghost_risk;
 
   return (
-    <Card as="article" lift className="flex flex-col overflow-hidden p-0">
+    <Card as="article" lift pad="none" className="flex flex-col overflow-hidden">
       <div className="flex flex-col gap-2.5 p-4 pb-3">
-        <h3 className="text-[14.5px] font-semibold leading-snug">{item.title}</h3>
+        <h3 className="text-base font-semibold leading-snug">{item.title}</h3>
 
-        <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-ink-3">
+        <p className="flex flex-wrap items-center gap-x-1.5 text-meta text-ink-3">
           <span className="font-medium text-ink-2">{p.company.name}</span>
           {/* An unconfirmed domain means the identity came from a board token,
               not from the company. Saying so is cheaper than being wrong. */}
@@ -63,7 +63,7 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
         {/* Liveness is the product's central claim, so it is a first-class row
             rather than a timestamp the reader has to interpret. The server drops
             an item it cannot describe, so this is never absent. */}
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] font-medium">
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-label font-medium">
           <span
             aria-hidden
             className={cn(
@@ -94,8 +94,8 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
           </Pill>
         )}
 
-        <p className="flex flex-wrap items-center gap-2 text-[12px]">
-          {/* `salary: null` is its own state. Defaulting it to "Competitive" is
+        <p className="flex flex-wrap items-center gap-2 text-meta">
+          {/* `salary: null` is its own state. Defaulting it to"Competitive" is
               exactly the invented field the display rules forbid. */}
           {p.salary ? (
             <>
@@ -115,7 +115,7 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
       <FitLedger fit={item.fit} />
 
       <div className="mt-auto flex items-center gap-1.5 border-t border-line px-4 py-2.5">
-        {/* A real link when we have one: "Open role" that opens nothing is the
+        {/* A real link when we have one:"Open role" that opens nothing is the
             kind of small dishonesty that costs trust cheaply. noreferrer as well
             as noopener so the employer's page learns nothing about the user. */}
         <Button
@@ -168,7 +168,7 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
               aria-label="Why is this not a fit?"
               className="absolute bottom-[calc(100%+8px)] right-0 z-70 w-[240px] rounded-[14px] border border-line bg-surface p-1.5 shadow-float"
             >
-              <p className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+              <p className="px-2.5 py-1.5 text-label font-semibold uppercase tracking-wider text-ink-3">
                 Why is this not a fit?
               </p>
               {DISMISS_REASONS.map((r) => (
@@ -179,7 +179,7 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
                     setPicking(false);
                     onDismiss(item.opportunity_id, r);
                   }}
-                  className="flex w-full cursor-pointer rounded-md px-2.5 py-2 text-left text-[13px] text-ink-2 transition-colors hover:bg-raised hover:text-ink"
+                  className="flex w-full cursor-pointer rounded-md px-2.5 py-2 text-left text-body text-ink-2 transition-colors hover:bg-raised hover:text-ink"
                 >
                   {REASON_LABEL[r]}
                 </button>

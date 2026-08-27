@@ -28,25 +28,25 @@ export function Field({
     <div className={cn('flex flex-col gap-1.5', className)}>
       <label
         htmlFor={htmlFor}
-        className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3"
+        className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3"
       >
         {label}
       </label>
       {children}
       {error ? (
-        <p className="flex items-start gap-1 text-[12px] font-medium text-bad">
+        <p className="flex items-start gap-1 text-meta font-medium text-bad">
           <span aria-hidden>✕</span>
           {error}
         </p>
       ) : hint ? (
-        <p className="text-[12px] leading-relaxed text-ink-3">{hint}</p>
+        <p className="text-meta leading-relaxed text-ink-3">{hint}</p>
       ) : null}
     </div>
   );
 }
 
 const CONTROL =
-  'w-full rounded-[10px] border border-line bg-surface px-3 py-2 text-[13.5px] text-ink ' +
+  'w-full rounded-[10px] border border-line bg-surface px-3 py-2 text-body text-ink ' +
   'shadow-[var(--shadow-flat)] transition-all duration-[var(--dur-base)] ' +
   'ease-[var(--ease-out-quart)] placeholder:text-ink-3 ' +
   'hover:border-line-strong focus:border-brand focus:outline-none ' +
@@ -103,8 +103,8 @@ export function Toggle({
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-[13.5px] font-medium">{label}</p>
-        {hint && <p className="mt-0.5 text-[12px] leading-relaxed text-ink-3">{hint}</p>}
+        <p className="text-body font-medium">{label}</p>
+        {hint && <p className="mt-0.5 text-meta leading-relaxed text-ink-3">{hint}</p>}
       </div>
       <button
         type="button"
@@ -159,7 +159,7 @@ export function Segmented<T extends string>({
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'cursor-pointer rounded-[7px] px-3 py-1.5 text-[12.5px] font-medium',
+            'cursor-pointer rounded-[7px] px-3 py-1.5 text-meta font-medium',
             'transition-all duration-[var(--dur-base)] ease-[var(--ease-out-quart)]',
             value === o.value
               ? 'bg-surface text-ink shadow-[var(--shadow-flat)]'

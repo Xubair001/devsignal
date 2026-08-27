@@ -90,7 +90,7 @@ export function SettingsPage() {
     setForm({ ...form, [k]: v });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4 sm:gap-5">
       <PageHeader
         title="Notifications"
         subtitle="The daily digest. A hard daily cap, a weekly cap, quiet hours in your own timezone, and a minimum band below which we do not interrupt you at all."
@@ -100,7 +100,7 @@ export function SettingsPage() {
       <Card className={consented ? 'border-good/25' : undefined}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 max-w-[62ch]">
-            <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+            <h2 className="flex items-center gap-2 text-lead font-semibold">
               Consent
               {consented ? (
                 <Pill tone="met">Given</Pill>
@@ -110,15 +110,15 @@ export function SettingsPage() {
                 <Pill tone="no_data">Not given</Pill>
               )}
             </h2>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">{CONSENT_TEXT}</p>
-            <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
+            <p className="mt-2 text-meta leading-relaxed text-ink-2">{CONSENT_TEXT}</p>
+            <p className="mt-2 text-meta leading-relaxed text-ink-3">
               Recorded with a wording version, so what you agreed to is part of the record —
               consent you cannot evidence is consent you do not have. Withdrawing keeps the
               record and stamps it, rather than erasing it: the evidence that a withdrawal was
               honoured matters too.
             </p>
             {form.consent_wording_version && (
-              <p className="mt-2 font-mono text-[11.5px] text-ink-3">
+              <p className="mt-2 font-mono text-label text-ink-3">
                 version {form.consent_wording_version}
               </p>
             )}
@@ -138,7 +138,7 @@ export function SettingsPage() {
       </Card>
 
       <Card className="flex flex-col gap-5">
-        <h2 className="text-[15px] font-semibold">When and how often</h2>
+        <h2 className="text-lead font-semibold">When and how often</h2>
 
         <Toggle
           checked={form.digest_enabled}
@@ -148,11 +148,14 @@ export function SettingsPage() {
           hint={consented ? undefined : 'Requires consent above.'}
         />
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field
             label="Timezone"
             htmlFor="tz"
             hint="Quiet hours are local to you, not to the server."
+            /* Full width until three columns fit: "America/Los_Angeles" does not
+               survive a third of a 640px viewport. */
+            className="sm:col-span-2 lg:col-span-1"
           >
             <Select id="tz" value={form.timezone} onChange={(e) => set('timezone', e.target.value)}>
               {ZONES.map((z) => (
@@ -182,7 +185,7 @@ export function SettingsPage() {
           </Field>
         </div>
 
-        <p className="-mt-2 text-[12px] leading-relaxed text-ink-3">
+        <p className="-mt-2 text-meta leading-relaxed text-ink-3">
           A window that wraps midnight is the normal case and is handled: 21:00 to 08:00 means
           overnight, not &ldquo;never&rdquo;. Quiet hours <b className="font-semibold">defer</b> a
           digest rather than cancelling it, so the day stays available once the window closes.
@@ -207,7 +210,7 @@ export function SettingsPage() {
 
         <Field
           label="Minimum band to interrupt you"
-          hint='A band, never a percentage. "Not enough information" clears neither: interrupting someone on evidence we admit we do not have is worse than staying quiet.'
+          hint='A band, never a percentage."Not enough information" clears neither: interrupting someone on evidence we admit we do not have is worse than staying quiet.'
         >
           <Segmented
             label="Minimum band"
@@ -240,14 +243,14 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <h2 className="text-[15px] font-semibold">Recent digests</h2>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+        <h2 className="text-lead font-semibold">Recent digests</h2>
+        <p className="mt-1 text-meta leading-relaxed text-ink-3">
           Every outcome is recorded with its reason, so &ldquo;why did I not get one
           yesterday&rdquo; always has an answer.
         </p>
 
         {history.isSuccess && history.data.sends.length === 0 && (
-          <p className="mt-3 text-[12.5px] text-ink-3">
+          <p className="mt-3 text-meta text-ink-3">
             No digest has been generated for you yet.
           </p>
         )}
@@ -259,20 +262,20 @@ export function SettingsPage() {
                 key={s.local_date}
                 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-[10px] border border-line bg-raised/50 px-3 py-2"
               >
-                <span className="num font-mono text-[12px] text-ink-3">{s.local_date}</span>
+                <span className="num font-mono text-meta text-ink-3">{s.local_date}</span>
                 <OutcomePill outcome={s.outcome} />
                 {s.item_count > 0 && (
-                  <span className="text-[12px] text-ink-2">
+                  <span className="text-meta text-ink-2">
                     {s.item_count} role{s.item_count === 1 ? '' : 's'}
                   </span>
                 )}
                 {s.attempts > 1 && (
-                  <span className="text-[11.5px] text-ink-3">
+                  <span className="text-label text-ink-3">
                     {s.attempts} attempts
                   </span>
                 )}
                 {s.reason && (
-                  <span className="basis-full text-[12px] leading-relaxed text-ink-3">
+                  <span className="basis-full text-meta leading-relaxed text-ink-3">
                     {s.reason}
                   </span>
                 )}

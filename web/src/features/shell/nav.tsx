@@ -149,7 +149,7 @@ export const NAV: NavItem[] = NAV_GROUPS.flatMap((g) =>
  *
  * Filtering here rather than at each render site means the sidebar, the drawer
  * and the command palette cannot disagree about what exists — which is exactly
- * how a "hidden" link ends up reachable from one of the three.
+ * how a"hidden" link ends up reachable from one of the three.
  */
 export function navFor(isAdmin: boolean): NavGroup[] {
   return NAV_GROUPS.filter((g) => isAdmin || !g.adminOnly).map((g) => ({

@@ -8,11 +8,29 @@ import { Pill } from '@/components/ui/Pill';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
 import { ErrorState, SkeletonCards } from '@/components/ui/States';
+import { ApiError } from '@/lib/api/client';
 import { useToast } from '@/components/ui/Toast';
 import { SkillEditor } from './SkillEditor';
 import { ResumePanel } from './ResumePanel';
 import { DangerZone } from './DangerZone';
 import { PageHeader } from '@/components/ui/PageHeader';
+
+/** What a profile looks like before it exists. profile_version 0 marks it. */
+const EMPTY_PROFILE: Profile = {
+  headline: null,
+  years_experience: null,
+  seniority: null,
+  is_management: false,
+  target_role_families: [],
+  target_countries: [],
+  work_mode_preference: null,
+  target_employment_types: [],
+  languages: [],
+  min_salary: null,
+  work_authorization: null,
+  skills: [],
+  profile_version: 0,
+};
 
 const SENIORITY = ['intern', 'junior', 'mid', 'senior', 'staff', 'principal'];
 const FAMILIES = [
@@ -21,14 +39,28 @@ const FAMILIES = [
 ];
 const WORK_MODES = ['remote', 'hybrid', 'onsite'];
 
-/** Empty is "no constraint", which is how retrieval reads it too. */
+/** Empty is"no constraint", which is how retrieval reads it too. */
 const NO_CONSTRAINT = '';
 
 export function ProfilePage() {
   const qc = useQueryClient();
   const toast = useToast();
 
-  const profile = useQuery({ queryKey: qk.profile(), queryFn: () => profileApi.get() });
+  /* A brand-new account has no profile row, and the API answers 404 for that.
+     Treated as an empty profile rather than an error: signing up and landing on"could not load your profile" is the worst possible first screen, and this
+     page is where a new user is supposed to start. */
+  const profile = useQuery({
+    queryKey: qk.profile(),
+    queryFn: async () => {
+      try {
+        return await profileApi.get();
+      } catch (err) {
+        if (err instanceof ApiError && err.notFound) return EMPTY_PROFILE;
+        throw err;
+      }
+    },
+  });
+  const isNew = profile.data?.profile_version === 0;
   const [form, setForm] = useState<ProfileInput | null>(null);
   const [skills, setSkills] = useState<{ name: string }[]>([]);
   const [unresolved, setUnresolved] = useState<string[]>([]);
@@ -72,16 +104,35 @@ export function ProfilePage() {
     setForm({ ...form, [k]: v });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4 sm:gap-5">
       <PageHeader
         title="Profile"
         subtitle="What matching reads. Every field here is an input to the eligibility gate or the fit score."
         aside={
-          <Pill tone="neutral">
-            <span className="num">v{profile.data.profile_version}</span>
-          </Pill>
+          isNew ? (
+            <Pill tone="no_data">Not saved yet</Pill>
+          ) : (
+            <Pill tone="neutral">
+              <span className="num">v{profile.data?.profile_version}</span>
+            </Pill>
+          )
         }
       />
+
+      {isNew && (
+        <div className="flex items-start gap-2.5 rounded-[12px] border border-brand-edge bg-brand-wash px-4 py-3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" aria-hidden className="mt-px size-4 shrink-0 text-brand">
+            <path d="M12 16v-4M12 8h.01" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+          <p className="text-meta leading-relaxed">
+            <b className="font-semibold">Start here.</b> The feed is empty until this is saved —
+            matching has nothing to match against. Skills and target families do the most work;
+            everything else narrows the gate.
+          </p>
+        </div>
+      )}
 
       <form
         onSubmit={(e) => {
@@ -91,7 +142,7 @@ export function ProfilePage() {
         className="flex flex-col gap-5"
       >
         <Card className="flex flex-col gap-5">
-          <h2 className="text-[15px] font-semibold">You</h2>
+          <h2 className="text-lead font-semibold">You</h2>
 
           <Field label="Headline" htmlFor="headline"
             hint="Free text. It is embedded into your profile vector, so it affects the semantic factor.">
@@ -103,7 +154,7 @@ export function ProfilePage() {
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Seniority" htmlFor="seniority">
               <Select
                 id="seniority"
@@ -154,8 +205,8 @@ export function ProfilePage() {
 
         <Card className="flex flex-col gap-5">
           <div>
-            <h2 className="text-[15px] font-semibold">What you are looking for</h2>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+            <h2 className="text-lead font-semibold">What you are looking for</h2>
+            <p className="mt-1 text-meta leading-relaxed text-ink-3">
               These feed the eligibility gate, which is a boolean stage — a role that fails one is
               excluded and explained, never scored down. Leaving a field empty means no constraint.
             </p>
@@ -200,7 +251,7 @@ export function ProfilePage() {
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field
               label="Minimum salary"
               htmlFor="salary"
@@ -247,8 +298,8 @@ export function ProfilePage() {
 
         <Card className="flex flex-col gap-4">
           <div>
-            <h2 className="text-[15px] font-semibold">Skills</h2>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+            <h2 className="text-lead font-semibold">Skills</h2>
+            <p className="mt-1 text-meta leading-relaxed text-ink-3">
               Matched against a posting&apos;s extracted skills through a shared ontology, so
               &ldquo;Go&rdquo; here and &ldquo;Golang&rdquo; on a posting reach the same skill.
               Together the required- and preferred-skill factors are 45 of the model&apos;s
@@ -258,8 +309,10 @@ export function ProfilePage() {
           <SkillEditor skills={skills} unresolved={unresolved} onChange={setSkills} />
         </Card>
 
-        <div className="sticky bottom-4 z-30 flex items-center justify-end gap-3 rounded-[14px] border border-line bg-glass px-4 py-3 glass">
-          <p className="mr-auto text-[12px] text-ink-3">
+        {/* Sticky, and it wraps rather than crushing the button off-screen: at
+            360px the sentence and the button cannot share a row. */}
+        <div className="sticky bottom-3 z-30 flex flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-[var(--radius-lg)] border border-line bg-glass px-4 py-3 glass sm:bottom-4">
+          <p className="mr-auto max-w-[46ch] text-meta text-ink-3">
             Saving bumps your profile version and recomputes every fit score.
           </p>
           <Button
@@ -299,7 +352,7 @@ function ChipPicker({
             aria-pressed={on}
             onClick={() => onChange(on ? selected.filter((x) => x !== o) : [...selected, o])}
             className={
-              'cursor-pointer rounded-full border px-2.5 py-1 text-[12px] font-medium ' +
+              'cursor-pointer rounded-full border px-2.5 py-1 text-meta font-medium ' +
               'transition-all duration-[var(--dur-base)] ease-[var(--ease-out-quart)] ' +
               (on
                 ? 'border-brand-edge bg-brand-wash text-brand-ink'

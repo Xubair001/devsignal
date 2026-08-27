@@ -46,7 +46,7 @@ export function MergeQueuePage() {
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 sm:gap-5">
       <PageHeader
         title="Merge review"
         subtitle="Pairs dedup thought might be duplicates but would not merge on its own. A false merge hides a real job and is otherwise invisible, so these wait for a person."
@@ -78,7 +78,7 @@ export function MergeQueuePage() {
               <Pill tone="neutral">
                 confidence <span className="num">{c.confidence.toFixed(2)}</span>
               </Pill>
-              <span className="text-[11.5px] text-ink-3">
+              <span className="text-label text-ink-3">
                 queued {relativeTime(c.created_at)}
               </span>
             </div>
@@ -89,10 +89,10 @@ export function MergeQueuePage() {
             </div>
 
             <div className="rounded-[10px] border border-line bg-raised/60 px-3 py-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+              <p className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3">
                 Why it was withheld
               </p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
+              <p className="mt-1 text-meta leading-relaxed text-ink-2">
                 {c.withheld_because}
               </p>
             </div>
@@ -118,7 +118,7 @@ export function MergeQueuePage() {
               >
                 Different roles
               </Button>
-              <p className="ml-auto text-[11.5px] text-ink-3">
+              <p className="ml-auto text-label text-ink-3">
                 Both decisions are written to the hash-chained audit log.
               </p>
             </div>
@@ -131,16 +131,16 @@ export function MergeQueuePage() {
 function Side({ title, id, label }: { title: string; id: string; label: string }) {
   return (
     <div className="rounded-[10px] border border-line px-3 py-2.5">
-      <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
+      <p className="text-micro font-bold uppercase tracking-[0.08em] text-ink-3">
         Posting {label}
       </p>
       <Link
         to={`/app/browse/${id}`}
-        className="mt-1 block text-[13px] font-semibold leading-snug decoration-line-strong underline-offset-2 hover:underline"
+        className="mt-1 block text-body font-semibold leading-snug decoration-line-strong underline-offset-2 hover:underline"
       >
         {title}
       </Link>
-      <p className="mt-1 truncate font-mono text-[10.5px] text-ink-3">{id}</p>
+      <p className="mt-1 truncate font-mono text-micro text-ink-3">{id}</p>
     </div>
   );
 }

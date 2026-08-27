@@ -36,7 +36,7 @@ export function OpportunityPage() {
     <div className="flex flex-col gap-4 rise">
       <Link
         to="/app/browse"
-        className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-ink-3 transition-colors hover:text-ink"
+        className="inline-flex w-fit items-center gap-1.5 text-meta font-medium text-ink-3 transition-colors hover:text-ink"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
           strokeLinecap="round" strokeLinejoin="round" aria-hidden className="size-3.5">
@@ -48,12 +48,12 @@ export function OpportunityPage() {
       <Card className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-[20px] font-bold leading-tight tracking-[-0.022em]">{p.title}</h1>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[13px] text-ink-2">
+            <h1 className="text-display font-bold leading-tight tracking-[-0.022em]">{p.title}</h1>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-body text-ink-2">
               <span className="font-semibold">{p.company.name}</span>
               {!p.company.domain_confirmed && (
                 <span
-                  className="text-[11.5px] text-ink-3"
+                  className="text-label text-ink-3"
                   title="Identified from the job-board token; no domain confirmed"
                 >
                   (unconfirmed company)
@@ -84,7 +84,7 @@ export function OpportunityPage() {
         {/* Liveness, first-class. Ours and theirs are labelled separately so the
             employer's claimed date is never read as our observation. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[10px] border border-line bg-raised/60 px-3.5 py-3">
-          <span className="flex items-center gap-2 text-[12.5px] font-semibold">
+          <span className="flex items-center gap-2 text-meta font-semibold">
             <span
               aria-hidden
               className={cn(
@@ -110,7 +110,7 @@ export function OpportunityPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-[13px]">
+        <div className="flex flex-wrap items-center gap-2 text-body">
           {p.salary ? (
             <>
               <span className="num font-mono font-semibold">{formatMoney(p.salary)}</span>
@@ -128,8 +128,8 @@ export function OpportunityPage() {
       </Card>
 
       <Card>
-        <h2 className="text-[14px] font-semibold">Observable signals</h2>
-        <p className="mt-1 text-[12px] leading-relaxed text-ink-3">
+        <h2 className="text-base font-semibold">Observable signals</h2>
+        <p className="mt-1 text-meta leading-relaxed text-ink-3">
           Facts only. There is no competitiveness estimate here because we have no applicant
           counts, and one invented figure would discredit every honest one beside it.
         </p>
@@ -160,13 +160,13 @@ export function OpportunityPage() {
 
       {p.description_html && (
         <Card>
-          <h2 className="text-[14px] font-semibold">Description</h2>
+          <h2 className="text-base font-semibold">Description</h2>
           <div
             className={cn(
-              'prose-sm mt-3 max-w-[72ch] text-[13.5px] leading-relaxed text-ink-2',
+              'prose-sm mt-3 max-w-[72ch] text-body leading-relaxed text-ink-2',
               '[&_a]:text-brand [&_a]:underline [&_a]:underline-offset-2',
-              '[&_h2]:mt-4 [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:text-ink',
-              '[&_h3]:mt-3 [&_h3]:text-[13.5px] [&_h3]:font-semibold [&_h3]:text-ink',
+              '[&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-ink',
+              '[&_h3]:mt-3 [&_h3]:text-body [&_h3]:font-semibold [&_h3]:text-ink',
               '[&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
               '[&_p]:my-2 [&_strong]:font-semibold [&_strong]:text-ink',
               '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5',
@@ -184,7 +184,7 @@ export function OpportunityPage() {
 
 function Fact({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <span className="flex items-baseline gap-1.5 text-[12px]">
+    <span className="flex items-baseline gap-1.5 text-meta">
       <span className="text-ink-3">{label}</span>
       <span className={muted ? 'text-ink-3 italic' : 'font-medium text-ink-2'}>{value}</span>
     </span>
@@ -204,10 +204,10 @@ function Stat({
 }) {
   return (
     <div className="rounded-[10px] border border-line bg-raised/50 px-3 py-2.5">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">{label}</dt>
+      <dt className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3">{label}</dt>
       <dd
         className={cn(
-          'mt-1 text-[15px] font-semibold capitalize',
+          'mt-1 text-lead font-semibold capitalize',
           tone === 'good' && 'text-good',
           tone === 'warn' && 'text-warn',
           tone === 'bad' && 'text-bad',
@@ -215,7 +215,7 @@ function Stat({
       >
         {value}
       </dd>
-      {hint && <p className="mt-0.5 text-[11px] leading-snug text-ink-3">{hint}</p>}
+      {hint && <p className="mt-0.5 text-label leading-snug text-ink-3">{hint}</p>}
     </div>
   );
 }

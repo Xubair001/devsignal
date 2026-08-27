@@ -44,12 +44,12 @@ export function Pill({
       title={title}
       className={cn(
         'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border',
-        'px-[7px] py-[1.5px] text-[11px] font-semibold',
+        'px-[7px] py-[1.5px] text-label font-semibold',
         TONE[tone],
       )}
     >
       {glyph && (
-        <span aria-hidden className="text-[10px] leading-none">
+        <span aria-hidden className="text-micro leading-none">
           {glyph}
         </span>
       )}

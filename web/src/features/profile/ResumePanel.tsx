@@ -63,8 +63,8 @@ export function ResumePanel() {
   return (
     <Card className="flex flex-col gap-4">
       <header>
-        <h2 className="text-[15px] font-semibold">Resume</h2>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
+        <h2 className="text-lead font-semibold">Resume</h2>
+        <p className="mt-1 text-meta leading-relaxed text-ink-3">
           Stored in private object storage, reachable only by a short-lived signed URL.
           Deleting one removes the document and its extracted text together.
         </p>
@@ -107,7 +107,7 @@ export function ResumePanel() {
           <path d="M12 16V4m0 0L8 8m4-4 4 4" />
           <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
         </svg>
-        <p className="mt-2.5 text-[13px] font-medium">
+        <p className="mt-2.5 text-body font-medium">
           Drop a PDF or text file, or{' '}
           <button
             type="button"
@@ -117,7 +117,7 @@ export function ResumePanel() {
             choose a file
           </button>
         </p>
-        <p className="mt-1 text-[11.5px] text-ink-3">
+        <p className="mt-1 text-label text-ink-3">
           {upload.isPending ? 'Uploading…' : 'PDF, TXT or Markdown'}
         </p>
       </div>
@@ -130,10 +130,10 @@ export function ResumePanel() {
               className="flex items-center gap-3 rounded-[10px] border border-line bg-raised/50 px-3 py-2.5"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium">
+                <p className="truncate text-body font-medium">
                   {r.filename ?? 'untitled document'}
                 </p>
-                <p className="mt-0.5 text-[11.5px] text-ink-3">
+                <p className="mt-0.5 text-label text-ink-3">
                   {(r.size_bytes / 1024).toFixed(0)} KB · uploaded{' '}
                   {relativeTime(r.uploaded_at)}
                   {r.text_chars != null && ` · ${r.text_chars.toLocaleString()} characters read`}

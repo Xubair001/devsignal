@@ -12,7 +12,7 @@ import { ThemeToggle } from '@/features/shell/ThemeToggle';
  * Deliberately plain about what this is: an operations console over a corpus we
  * keep true, not a marketing page. The one piece of persuasion on the screen is
  * the honesty note, because the first thing a new operator needs to know is that
- * the bands will read "Not enough information" and that this is correct.
+ * the bands will read"Not enough information" and that this is correct.
  */
 export function LoginPage() {
   const qc = useQueryClient();
@@ -57,8 +57,8 @@ export function LoginPage() {
         <div className="mb-7 flex flex-col items-center gap-3 text-center">
           <Mark />
           <div>
-            <h1 className="text-[22px] font-bold tracking-[-0.024em]">DevSignal</h1>
-            <p className="mt-1 text-[13px] text-ink-3">
+            <h1 className="text-display font-bold tracking-[-0.024em]">DevSignal</h1>
+            <p className="mt-1 text-body text-ink-3">
               Developer opportunity intelligence
             </p>
           </div>
@@ -79,7 +79,7 @@ export function LoginPage() {
                   setError(null);
                 }}
                 className={
-                  'flex-1 cursor-pointer rounded-[7px] px-3 py-1.5 text-[12.5px] font-medium ' +
+                  'flex-1 cursor-pointer rounded-[7px] px-3 py-1.5 text-meta font-medium ' +
                   'transition-all duration-[var(--dur-base)] ' +
                   (mode === m
                     ? 'bg-surface text-ink shadow-[var(--shadow-flat)]'
@@ -125,7 +125,7 @@ export function LoginPage() {
           {error && (
             <p
               role="alert"
-              className="rounded-[10px] border border-bad/25 bg-bad-wash px-3 py-2 text-[12.5px] font-medium text-bad"
+              className="rounded-[10px] border border-bad/25 bg-bad-wash px-3 py-2 text-meta font-medium text-bad"
             >
               {error}
             </p>
@@ -141,7 +141,7 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-[12px] leading-relaxed text-ink-3">
+        <p className="mt-5 text-center text-meta leading-relaxed text-ink-3">
           Most fit bands currently read <b className="font-semibold">Not enough information</b>.
           That is correct, not broken — skill extraction covers only part of the corpus, so 45 of
           the model&apos;s 100 points cannot be scored yet.

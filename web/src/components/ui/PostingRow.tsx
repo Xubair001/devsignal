@@ -35,12 +35,12 @@ export function PostingRow({ p, right }: { p: Posting; right?: React.ReactNode }
       <div className="min-w-0 flex-1">
         <Link
           to={`/app/browse/${p.id}`}
-          className="text-[13.5px] font-semibold leading-snug decoration-line-strong underline-offset-2 hover:underline"
+          className="text-body font-semibold leading-snug decoration-line-strong underline-offset-2 hover:underline"
         >
           {p.title}
         </Link>
 
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-ink-3">
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-meta text-ink-3">
           <span className="font-medium text-ink-2">{p.company.name}</span>
           {where && (
             <>
@@ -56,7 +56,7 @@ export function PostingRow({ p, right }: { p: Posting; right?: React.ReactNode }
           )}
         </p>
 
-        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
+        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-meta">
           {p.salary ? (
             <span className="num font-mono font-medium text-ink-2">{formatMoney(p.salary)}</span>
           ) : (

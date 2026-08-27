@@ -83,7 +83,7 @@ export function AppShell() {
         <nav className="flex-1 overflow-y-auto px-3 py-2 no-bar" aria-label="Main">
           {groups.map((group) => (
             <div key={group.heading} className="mb-5">
-              <p className="mb-1.5 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-ink-3">
+              <p className="mb-1.5 px-2.5 text-micro font-bold uppercase tracking-[0.09em] text-ink-3">
                 {group.heading}
               </p>
               <ul className="flex flex-col gap-0.5">
@@ -108,7 +108,7 @@ export function AppShell() {
       <div className="flex min-w-0 flex-col">
         {/* ------------------------------------------------------------ header */}
         <header className="sticky top-0 z-50 border-b border-glass-line bg-glass glass">
-          <div className="mx-auto flex h-[54px] max-w-[1180px] items-center gap-2 px-4 sm:px-6">
+          <div className="mx-auto flex h-[56px] max-w-[1180px] items-center gap-2 px-3 sm:h-[58px] sm:gap-2.5 sm:px-6">
             <IconButton
               label="Open navigation"
               className="lg:hidden"
@@ -127,7 +127,7 @@ export function AppShell() {
                 onClick={() => setPaletteOpen(true)}
                 className={cn(
                   'group hidden h-[34px] cursor-pointer items-center gap-2 rounded-[10px] border',
-                  'border-line bg-surface/70 pl-2.5 pr-2 text-[12.5px] text-ink-3',
+                  'border-line bg-surface/70 pl-2.5 pr-2 text-meta text-ink-3',
                   'transition-all duration-[var(--dur-base)] ease-[var(--ease-out-quart)]',
                   'hover:border-line-strong hover:text-ink-2 sm:flex',
                 )}
@@ -139,7 +139,7 @@ export function AppShell() {
                   <path d="m20 20-3.5-3.5" />
                 </svg>
                 Search
-                <kbd className="ml-4 rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[10.5px]">
+                <kbd className="ml-4 rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-micro">
                   ⌘K
                 </kbd>
               </button>
@@ -154,7 +154,7 @@ export function AppShell() {
                   aria-label="Account"
                   className={cn(
                     'grid size-[34px] cursor-pointer place-items-center rounded-full',
-                    'border border-brand-edge bg-brand-wash text-[11.5px] font-bold text-brand-ink',
+                    'border border-brand-edge bg-brand-wash text-label font-bold text-brand-ink',
                     'transition-transform duration-[var(--dur-base)] ease-[var(--ease-spring)]',
                     'hover:scale-105',
                   )}
@@ -168,10 +168,10 @@ export function AppShell() {
                     className="absolute right-0 top-[calc(100%+8px)] w-[248px] rounded-[14px] border border-line bg-surface p-1.5 shadow-[var(--shadow-float)]"
                   >
                     <div className="px-2.5 py-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+                      <p className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3">
                         Signed in
                       </p>
-                      <p className="mt-0.5 truncate font-mono text-[11.5px] text-ink-2">
+                      <p className="mt-0.5 truncate font-mono text-label text-ink-2">
                         {session?.user_id}
                       </p>
                       {/* The role, shown. An operator holding admin should be able
@@ -179,7 +179,7 @@ export function AppShell() {
                           confusing way to learn your own permissions. */}
                       <span
                         className={cn(
-                          'mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10.5px]',
+                          'mt-1.5 inline-flex rounded-full px-2 py-0.5 text-micro',
                           'font-bold uppercase tracking-wider',
                           session?.is_admin
                             ? 'bg-brand-wash text-brand-ink'
@@ -201,12 +201,12 @@ export function AppShell() {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-6 sm:px-6">
+        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-5 sm:px-6 sm:py-7">
           <Outlet />
         </main>
 
         <footer className="mx-auto w-full max-w-[1180px] px-4 pb-8 sm:px-6">
-          <p className="border-t border-line pt-4 text-[11.5px] leading-relaxed text-ink-3">
+          <p className="border-t border-line pt-4 text-label leading-relaxed text-ink-3">
             Bands and factor contributions, never a bare percentage. Nothing on this page is
             rendered that cannot be derived from something we observed.
           </p>
@@ -229,7 +229,7 @@ export function AppShell() {
             <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label="Main">
               {groups.map((group) => (
                 <div key={group.heading} className="mb-5">
-                  <p className="mb-1.5 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-ink-3">
+                  <p className="mb-1.5 px-2.5 text-micro font-bold uppercase tracking-[0.09em] text-ink-3">
                     {group.heading}
                   </p>
                   <ul className="flex flex-col gap-0.5">
@@ -271,7 +271,7 @@ function Brand() {
           <circle cx="19.5" cy="6" r="2" fill="currentColor" />
         </svg>
       </span>
-      <span className="text-[14px] font-bold tracking-[-0.02em]">DevSignal</span>
+      <span className="text-base font-bold tracking-[-0.02em]">DevSignal</span>
     </div>
   );
 }
@@ -296,7 +296,7 @@ function SideLink({
       className={({ isActive }) =>
         cn(
           'group relative flex items-center gap-2.5 rounded-[9px] px-2.5 py-[7px]',
-          'text-[13px] font-medium transition-all duration-[var(--dur-base)]',
+          'text-body font-medium transition-all duration-[var(--dur-base)]',
           'ease-[var(--ease-out-quart)]',
           isActive
             ? 'bg-brand-wash text-brand-ink'
@@ -319,7 +319,7 @@ function SideLink({
           {icon}
           <span className="flex-1 truncate">{label}</span>
           {badge !== undefined && (
-            <span className="num rounded-full bg-warn-wash px-1.5 py-0.5 text-[10.5px] font-bold text-warn">
+            <span className="num rounded-full bg-warn-wash px-1.5 py-0.5 text-micro font-bold text-warn">
               {badge}
             </span>
           )}
@@ -332,7 +332,7 @@ function SideLink({
 function SidebarFooter() {
   return (
     <div className="border-t border-line px-4 py-3">
-      <p className="text-[11px] leading-relaxed text-ink-3">
+      <p className="text-label leading-relaxed text-ink-3">
         Corpus kept <span className="font-semibold text-ink-2">true</span>, not just large.
       </p>
     </div>
@@ -344,7 +344,7 @@ function MenuLink({ to, label }: { to: string; label: string }) {
     <NavLink
       to={to}
       role="menuitem"
-      className="flex rounded-md px-2.5 py-1.5 text-[12.5px] text-ink-2 transition-colors hover:bg-raised hover:text-ink"
+      className="flex rounded-md px-2.5 py-1.5 text-meta text-ink-2 transition-colors hover:bg-raised hover:text-ink"
     >
       {label}
     </NavLink>
@@ -362,7 +362,7 @@ function SignOut() {
         // with no token means a burst of 401s behind the login screen.
         await qc.resetQueries();
       }}
-      className="flex w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-bad-wash hover:text-bad"
+      className="flex w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-meta text-ink-2 transition-colors hover:bg-bad-wash hover:text-bad"
     >
       Sign out
     </button>
@@ -387,7 +387,7 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
   const isDetail = parts.length > 1;
 
   return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-body">
       <span className={isDetail ? 'text-ink-3' : 'font-semibold'}>{head}</span>
       {isDetail && (
         <>

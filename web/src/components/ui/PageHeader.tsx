@@ -19,9 +19,9 @@ export function PageHeader({
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="text-[19px] font-bold tracking-[-0.022em]">{title}</h1>
+        <h1 className="text-title font-bold tracking-[-0.022em]">{title}</h1>
         {subtitle && (
-          <p className="mt-1 max-w-[68ch] text-[12.5px] leading-relaxed text-ink-3">
+          <p className="mt-1 max-w-[68ch] text-meta leading-relaxed text-ink-3">
             {subtitle}
           </p>
         )}

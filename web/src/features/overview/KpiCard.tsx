@@ -25,17 +25,17 @@ export function KpiCard({ label, value, unit, note, icon, series, delta }: Props
         : 'down';
 
   return (
-    <Card lift className="flex flex-col gap-2.5 p-4 pb-3">
+    <Card lift className="flex flex-col gap-2.5 pb-3">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[12.5px] font-medium text-ink-2">{label}</span>
+        <span className="text-meta font-medium text-ink-2">{label}</span>
         <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand-wash text-brand-ink">
           {icon}
         </span>
       </div>
 
-      <p className="text-[30px] font-semibold leading-none tracking-tight num">
+      <p className="text-hero font-semibold leading-none tracking-tight num">
         {value}
-        {unit && <span className="text-[15px] font-medium tracking-normal text-ink-3">{unit}</span>}
+        {unit && <span className="text-lead font-medium tracking-normal text-ink-3">{unit}</span>}
       </p>
 
       {series && series.length > 1 ? (
@@ -49,11 +49,11 @@ export function KpiCard({ label, value, unit, note, icon, series, delta }: Props
       )}
 
       <div className="flex items-center justify-between gap-2.5">
-        <span className="text-[11.5px] text-ink-3">{note}</span>
+        <span className="text-label text-ink-3">{note}</span>
         {delta && (
           <span
             className={cn(
-              'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold num',
+              'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-label font-semibold num',
               tone === 'up' && 'bg-good-wash text-good',
               tone === 'down' && 'bg-bad-wash text-bad',
               tone === 'flat' && 'bg-null-wash text-null',

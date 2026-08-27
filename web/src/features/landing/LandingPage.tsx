@@ -7,8 +7,8 @@ import { cn } from '@/components/ui/cn';
  * The public page.
  *
  * Every claim here is one the product can actually keep, which is the whole
- * pitch and also a constraint on the copy: there is no "10,000 jobs" number,
- * no "we find you the perfect role", no testimonial. Blueprint §3 binds the
+ * pitch and also a constraint on the copy: there is no"10,000 jobs" number,
+ * no"we find you the perfect role", no testimonial. Blueprint §3 binds the
  * marketing surface as much as the app — inventing a figure here to make the
  * page feel substantial would discredit the honest ones inside it.
  *
@@ -34,20 +34,20 @@ function Header() {
       <div className="mx-auto flex h-[60px] max-w-[1100px] items-center gap-3 px-5 sm:px-8">
         <Link to="/" className="flex items-center gap-2.5">
           <Mark size={28} />
-          <span className="text-[15px] font-bold tracking-[-0.02em]">DevSignal</span>
+          <span className="text-lead font-bold tracking-[-0.02em]">DevSignal</span>
         </Link>
         <nav className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
           <ThemeToggle />
           <Link
             to="/login"
-            className="rounded-[9px] px-3 py-2 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink"
+            className="rounded-[9px] px-3 py-2 text-body font-medium text-ink-2 transition-colors hover:text-ink"
           >
             Sign in
           </Link>
           <Link
             to="/register"
             className={cn(
-              'rounded-[9px] border border-transparent bg-brand px-3.5 py-2 text-[13px]',
+              'rounded-[9px] border border-transparent bg-brand px-3.5 py-2 text-body',
               'font-semibold text-white transition-all duration-[var(--dur-base)]',
               'ease-[var(--ease-out-quart)] hover:-translate-y-px hover:brightness-110',
             )}
@@ -65,17 +65,17 @@ function Hero() {
     <section className="mx-auto max-w-[1100px] px-5 pb-16 pt-16 sm:px-8 sm:pb-24 sm:pt-24">
       <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
         <div className="rise">
-          <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-3">
+          <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-label font-semibold uppercase tracking-[0.07em] text-ink-3">
             <span aria-hidden className="size-1.5 rounded-full bg-good" />
             Verified liveness, not a bigger index
           </p>
 
-          <h1 className="text-[34px] font-extrabold leading-[1.08] tracking-[-0.03em] sm:text-[44px]">
+          <h1 className="text-hero font-extrabold leading-[1.08] tracking-[-0.03em] sm:text-hero">
             An estimated one in four job listings is a ghost.
             <span className="mt-2 block text-brand">We check, then tell you why.</span>
           </h1>
 
-          <p className="mt-6 max-w-[54ch] text-[15px] leading-[1.65] text-ink-2">
+          <p className="mt-6 max-w-[54ch] text-lead leading-[1.65] text-ink-2">
             DevSignal is an explainable recommender over a corpus we keep true. Every role it
             shows you carries the arithmetic behind its rating and the moment we last confirmed
             the role was open — because a recommendation you cannot check is a guess with better
@@ -86,7 +86,7 @@ function Hero() {
             <Link
               to="/register"
               className={cn(
-                'inline-flex h-11 items-center rounded-[11px] bg-brand px-5 text-[14px]',
+                'inline-flex h-11 items-center rounded-[11px] bg-brand px-5 text-base',
                 'font-semibold text-white shadow-[0_6px_18px_-6px_var(--color-brand-edge)]',
                 'transition-all duration-[var(--dur-base)] ease-[var(--ease-out-quart)]',
                 'hover:-translate-y-0.5 hover:brightness-110',
@@ -96,13 +96,13 @@ function Hero() {
             </Link>
             <Link
               to="/login"
-              className="inline-flex h-11 items-center rounded-[11px] border border-line bg-surface px-5 text-[14px] font-medium text-ink-2 transition-all duration-[var(--dur-base)] hover:border-line-strong hover:text-ink"
+              className="inline-flex h-11 items-center rounded-[11px] border border-line bg-surface px-5 text-base font-medium text-ink-2 transition-all duration-[var(--dur-base)] hover:border-line-strong hover:text-ink"
             >
               Sign in
             </Link>
           </div>
 
-          <p className="mt-5 text-[12.5px] leading-relaxed text-ink-3">
+          <p className="mt-5 text-meta leading-relaxed text-ink-3">
             No credit card, because there is nothing to charge for yet. This is early software and
             the corpus is small — see what it does and does not know below.
           </p>
@@ -130,19 +130,19 @@ function SpecimenCard() {
       <div className="rounded-[13px] border border-line bg-ground p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold leading-snug">
+            <p className="text-base font-semibold leading-snug">
               Senior Backend Engineer, Platform
             </p>
-            <p className="mt-0.5 text-[12px] text-ink-3">
+            <p className="mt-0.5 text-meta text-ink-3">
               <span className="font-medium text-ink-2">GitLab</span> · Remote (US, CA)
             </p>
           </div>
-          <span className="shrink-0 rounded-full border border-line bg-surface px-2 py-1 text-[10.5px] font-bold uppercase tracking-wider text-ink-3">
+          <span className="shrink-0 rounded-full border border-line bg-surface px-2 py-1 text-micro font-bold uppercase tracking-wider text-ink-3">
             Stretch
           </span>
         </div>
 
-        <p className="mt-2.5 flex items-center gap-1.5 text-[11.5px] font-medium">
+        <p className="mt-2.5 flex items-center gap-1.5 text-label font-medium">
           <span
             aria-hidden
             className="size-1.5 rounded-full bg-good shadow-[0_0_0_3px_var(--color-good-wash)]"
@@ -151,10 +151,10 @@ function SpecimenCard() {
           <span className="font-normal text-ink-3">· checked 2 hours ago</span>
         </p>
 
-        <p className="mt-2 text-[12px] text-ink-3">Salary not disclosed</p>
+        <p className="mt-2 text-meta text-ink-3">Salary not disclosed</p>
 
         <div className="mt-3.5 border-t border-line pt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+          <p className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3">
             39 of a possible 90 points
           </p>
           <ul className="mt-2 flex flex-col gap-1.5">
@@ -167,7 +167,7 @@ function SpecimenCard() {
         </div>
       </div>
 
-      <p className="px-3 py-2.5 text-[11px] leading-relaxed text-ink-3">
+      <p className="px-3 py-2.5 text-label leading-relaxed text-ink-3">
         Illustrative values, real layout. There is no percentage anywhere, because we have not
         calibrated one — a bare number would imply a probability we cannot support.
       </p>
@@ -189,10 +189,10 @@ function Ledger({
   unscored?: boolean;
 }) {
   return (
-    <li className="flex items-baseline gap-2 text-[12px]">
+    <li className="flex items-baseline gap-2 text-meta">
       <span
         className={cn(
-          'num w-[72px] shrink-0 font-mono text-[11.5px]',
+          'num w-[72px] shrink-0 font-mono text-label',
           unscored ? 'italic text-ink-3' : full ? 'font-semibold text-good' : 'text-ink-2',
         )}
       >
@@ -219,7 +219,7 @@ const QUESTIONS = [
   {
     n: '03',
     q: 'What am I missing?',
-    a: 'Every role the eligibility gate excluded, with the specific reason. "Why am I not seeing X" has an answer you can read.',
+    a: 'Every role the eligibility gate excluded, with the specific reason."Why am I not seeing X" has an answer you can read.',
     state: 'built' as const,
   },
   {
@@ -234,10 +234,10 @@ function Questions() {
   return (
     <section className="border-y border-line bg-ground-2/40">
       <div className="mx-auto max-w-[1100px] px-5 py-16 sm:px-8 sm:py-20">
-        <h2 className="max-w-[30ch] text-[26px] font-bold leading-tight tracking-[-0.025em] sm:text-[30px]">
+        <h2 className="max-w-[30ch] text-hero font-bold leading-tight tracking-[-0.025em] sm:text-hero">
           Four questions, in order.
         </h2>
-        <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed text-ink-2">
+        <p className="mt-3 max-w-[62ch] text-base leading-relaxed text-ink-2">
           The fourth is the one that matters most and the only one nobody can build quickly — it
           needs months of observed demand. The numbering is a dependency order, not a menu.
         </p>
@@ -254,12 +254,12 @@ function Questions() {
               )}
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="num font-mono text-[11.5px] font-semibold text-ink-3">
+                <span className="num font-mono text-label font-semibold text-ink-3">
                   {item.n}
                 </span>
                 <span
                   className={cn(
-                    'rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider',
+                    'rounded-full px-2 py-0.5 text-micro font-bold uppercase tracking-wider',
                     item.state === 'built'
                       ? 'bg-good-wash text-good'
                       : 'bg-warn-wash text-warn',
@@ -268,10 +268,10 @@ function Questions() {
                   {item.state === 'built' ? 'Built' : 'Collecting data'}
                 </span>
               </div>
-              <h3 className="mt-3 text-[16px] font-semibold leading-snug tracking-[-0.015em]">
+              <h3 className="mt-3 text-lead font-semibold leading-snug tracking-[-0.015em]">
                 {item.q}
               </h3>
-              <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{item.a}</p>
+              <p className="mt-2 text-body leading-relaxed text-ink-2">{item.a}</p>
             </article>
           ))}
         </div>
@@ -283,7 +283,7 @@ function Questions() {
 const RULES = [
   {
     t: 'A missing field beats an invented one',
-    d: 'When an employer does not disclose pay, it says "Salary not disclosed". It never shows an estimate dressed as the employer\'s number.',
+    d: 'When an employer does not disclose pay, it says"Salary not disclosed". It never shows an estimate dressed as the employer\'s number.',
   },
   {
     t: 'No score depends on the clock',
@@ -291,7 +291,7 @@ const RULES = [
   },
   {
     t: 'Unreadable is not zero',
-    d: 'If we could not extract a posting\'s requirements, the factor is excluded from the total rather than scored as a miss — and the band says "Not enough information".',
+    d: 'If we could not extract a posting\'s requirements, the factor is excluded from the total rather than scored as a miss — and the band says"Not enough information".',
   },
   {
     t: 'Closure needs evidence',
@@ -304,10 +304,10 @@ function Honesty() {
     <section className="mx-auto max-w-[1100px] px-5 py-16 sm:px-8 sm:py-20">
       <div className="grid gap-10 lg:grid-cols-[0.85fr_1fr] lg:gap-14">
         <div>
-          <h2 className="text-[26px] font-bold leading-tight tracking-[-0.025em] sm:text-[30px]">
+          <h2 className="text-hero font-bold leading-tight tracking-[-0.025em] sm:text-hero">
             Trust is lost by one invented field.
           </h2>
-          <p className="mt-3 max-w-[46ch] text-[14px] leading-relaxed text-ink-2">
+          <p className="mt-3 max-w-[46ch] text-base leading-relaxed text-ink-2">
             Not by a missing one. That single sentence decides most of the design, and these are
             the rules it produced. They are enforced in the code, with tests, not stated as
             values.
@@ -330,8 +330,8 @@ function Honesty() {
                 <path d="m4 12.5 5 5L20 6.5" />
               </svg>
               <div>
-                <h3 className="text-[13.5px] font-semibold">{r.t}</h3>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">{r.d}</p>
+                <h3 className="text-body font-semibold">{r.t}</h3>
+                <p className="mt-1 text-meta leading-relaxed text-ink-2">{r.d}</p>
               </div>
             </li>
           ))}
@@ -345,17 +345,17 @@ function Closing() {
   return (
     <section className="border-t border-line bg-ground-2/40">
       <div className="mx-auto max-w-[1100px] px-5 py-16 text-center sm:px-8 sm:py-20">
-        <h2 className="mx-auto max-w-[26ch] text-[26px] font-bold leading-tight tracking-[-0.025em] sm:text-[30px]">
+        <h2 className="mx-auto max-w-[26ch] text-hero font-bold leading-tight tracking-[-0.025em] sm:text-hero">
           See what it knows, and what it does not.
         </h2>
-        <p className="mx-auto mt-3 max-w-[58ch] text-[14px] leading-relaxed text-ink-2">
+        <p className="mx-auto mt-3 max-w-[58ch] text-base leading-relaxed text-ink-2">
           The console shows its own gaps: which sources are healthy, which objectives cannot be
           measured yet, and why a role was excluded from your feed.
         </p>
         <Link
           to="/register"
           className={cn(
-            'mt-8 inline-flex h-11 items-center rounded-[11px] bg-brand px-6 text-[14px]',
+            'mt-8 inline-flex h-11 items-center rounded-[11px] bg-brand px-6 text-base',
             'font-semibold text-white shadow-[0_6px_18px_-6px_var(--color-brand-edge)]',
             'transition-all duration-[var(--dur-base)] ease-[var(--ease-out-quart)]',
             'hover:-translate-y-0.5 hover:brightness-110',
@@ -374,9 +374,9 @@ function Footer() {
       <div className="mx-auto flex max-w-[1100px] flex-col gap-3 px-5 py-8 sm:flex-row sm:items-center sm:px-8">
         <div className="flex items-center gap-2.5">
           <Mark size={22} />
-          <span className="text-[13px] font-semibold">DevSignal</span>
+          <span className="text-body font-semibold">DevSignal</span>
         </div>
-        <p className="text-[12px] leading-relaxed text-ink-3 sm:ml-auto sm:text-right">
+        <p className="text-meta leading-relaxed text-ink-3 sm:ml-auto sm:text-right">
           Early software over a small corpus. We would rather show you a short honest list than a
           long confident one.
         </p>

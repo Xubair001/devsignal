@@ -74,15 +74,15 @@ export function BrowsePage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 sm:gap-5">
       <PageHeader
         title="Corpus"
         subtitle="Everything ingested and ready to serve, newest first. Closed and merged-away postings are never listed."
       />
 
-      <Card className="flex flex-wrap items-end gap-3 p-3.5">
+      <Card pad="tight" className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+          <span className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3">
             Family
           </span>
           <Select
@@ -98,7 +98,7 @@ export function BrowsePage() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+          <span className="text-label font-semibold uppercase tracking-[0.06em] text-ink-3">
             Work mode
           </span>
           <Select
@@ -130,7 +130,7 @@ export function BrowsePage() {
 
       {list.isSuccess && list.data.items.length > 0 && (
         <>
-          <Card className="overflow-hidden p-0">
+          <Card pad="none" className="overflow-hidden">
             <ul>
               {list.data.items.map((p) => (
                 <PostingRow key={p.id} p={p} />
@@ -153,7 +153,7 @@ export function BrowsePage() {
             </div>
           </div>
           {!list.data.next_cursor && (
-            <p className="text-center text-[12px] text-ink-3">
+            <p className="text-center text-meta text-ink-3">
               End of the corpus. A cursor is only issued for a full page, so a short page is the
               last one.
             </p>

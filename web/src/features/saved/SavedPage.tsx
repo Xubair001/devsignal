@@ -15,8 +15,8 @@ import { relativeTime } from '@/lib/format';
  * Saved postings.
  *
  * A save is a decision revisited days later, which is exactly when liveness
- * matters most: the interesting question here is not "what did I save" but
- * "which of these is still open". So each row carries its verified-open state
+ * matters most: the interesting question here is not"what did I save" but
+ *"which of these is still open". So each row carries its verified-open state
  * and its check recency, and postings that closed since being saved are counted
  * rather than silently missing.
  */
@@ -47,7 +47,7 @@ export function SavedPage() {
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 sm:gap-5">
       <PageHeader
         title="Saved"
         subtitle="Roles you kept. Liveness is shown on every row because a save is revisited days later, which is when it matters most."
@@ -67,7 +67,7 @@ export function SavedPage() {
             <path d="M12 9v4M12 17h.01" />
             <circle cx="12" cy="12" r="9" />
           </svg>
-          <p className="text-[12.5px] leading-relaxed">
+          <p className="text-meta leading-relaxed">
             <b className="font-semibold">
               {saved.data.closed_since_saved} saved role
               {saved.data.closed_since_saved === 1 ? '' : 's'} no longer listed.
@@ -90,7 +90,7 @@ export function SavedPage() {
       )}
 
       {saved.isSuccess && saved.data.items.length > 0 && (
-        <Card className="overflow-hidden p-0">
+        <Card pad="none" className="overflow-hidden">
           <ul>
             {saved.data.items.map((s) => (
               <PostingRow
@@ -98,7 +98,7 @@ export function SavedPage() {
                 p={s.posting}
                 right={
                   <>
-                    <span className="hidden text-[11.5px] text-ink-3 sm:block">
+                    <span className="hidden text-label text-ink-3 sm:block">
                       saved {relativeTime(s.saved_at)}
                     </span>
                     <Button onClick={() => apply.mutate(s.opportunity_id)}>I applied</Button>

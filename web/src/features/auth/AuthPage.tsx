@@ -57,7 +57,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
       <main className="w-full max-w-[400px] rise">
         <Link to="/" className="mb-8 flex flex-col items-center gap-3 text-center">
           <Mark size={44} />
-          <span className="text-[21px] font-bold tracking-[-0.024em]">DevSignal</span>
+          <span className="text-display font-bold tracking-[-0.024em]">DevSignal</span>
         </Link>
 
         <form
@@ -65,10 +65,10 @@ export function AuthPage({ mode }: { mode: Mode }) {
           className="flex flex-col gap-5 rounded-[18px] border border-line bg-surface p-6 shadow-[var(--shadow-raise)] sm:p-7"
         >
           <div>
-            <h1 className="text-[18px] font-bold tracking-[-0.02em]">
+            <h1 className="text-title font-bold tracking-[-0.02em]">
               {isRegister ? 'Create your account' : 'Sign in'}
             </h1>
-            <p className="mt-1 text-[13px] text-ink-3">
+            <p className="mt-1 text-body text-ink-3">
               {isRegister
                 ? 'Then tell us what you are looking for, and the feed follows.'
                 : 'Welcome back.'}
@@ -107,7 +107,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
           {error && (
             <p
               role="alert"
-              className="rounded-[10px] border border-bad/25 bg-bad-wash px-3 py-2.5 text-[12.5px] font-medium leading-relaxed text-bad"
+              className="rounded-[10px] border border-bad/25 bg-bad-wash px-3 py-2.5 text-meta font-medium leading-relaxed text-bad"
             >
               {error}
             </p>
@@ -117,12 +117,12 @@ export function AuthPage({ mode }: { mode: Mode }) {
             type="submit"
             variant="primary"
             disabled={pending || !email || !password}
-            className="h-10 w-full justify-center text-[13.5px]"
+            className="h-10 w-full justify-center text-body"
           >
             {pending ? 'Working…' : isRegister ? 'Create account' : 'Sign in'}
           </Button>
 
-          <p className="text-center text-[12.5px] text-ink-3">
+          <p className="text-center text-meta text-ink-3">
             {isRegister ? 'Already have an account? ' : 'No account yet? '}
             <Link
               to={isRegister ? '/login' : '/register'}
@@ -133,7 +133,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
           </p>
         </form>
 
-        <p className="mt-6 text-center text-[12px] leading-relaxed text-ink-3">
+        <p className="mt-6 text-center text-meta leading-relaxed text-ink-3">
           Most fit bands read <b className="font-semibold text-ink-2">Stretch</b> or{' '}
           <b className="font-semibold text-ink-2">Not enough information</b> on a new profile.
           That is the model being honest about what it can observe, not a fault.

@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             className={
-              'flex animate-[toast_.22s_ease-out] items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-medium shadow-float ' +
+              'flex animate-[toast_.22s_ease-out] items-center gap-2 rounded-full px-4 py-2.5 text-body font-medium shadow-float ' +
               (t.tone === 'bad' ? 'bg-bad text-white' : 'bg-ink text-ground')
             }
           >

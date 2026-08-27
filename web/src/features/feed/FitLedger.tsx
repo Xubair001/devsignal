@@ -50,15 +50,15 @@ export function FitLedger({ fit }: { fit: FitView }) {
 function LedgerRow({ factor: f }: { factor: FactorView }) {
   const label = f.factor.replace(/_/g, ' ');
 
-  /* An unscored factor is recessed and labelled in words. "We could not read
-     this posting's required skills" and "you match none of them" are opposite
+  /* An unscored factor is recessed and labelled in words."We could not read
+     this posting's required skills" and"you match none of them" are opposite
      statements, and they must not look alike. */
   if (!f.scored) {
     return (
       <div className="grid grid-cols-[1fr_auto] items-center gap-x-2.5 gap-y-1">
-        <span className="text-[12.5px] text-ink-3">{label}</span>
-        <span className="text-[12px] font-medium italic text-ink-3">not scored</span>
-        {f.reason && <span className="col-span-full text-[11.5px] text-null">{f.reason}</span>}
+        <span className="text-meta text-ink-3">{label}</span>
+        <span className="text-meta font-medium italic text-ink-3">not scored</span>
+        {f.reason && <span className="col-span-full text-label text-null">{f.reason}</span>}
       </div>
     );
   }
@@ -67,8 +67,8 @@ function LedgerRow({ factor: f }: { factor: FactorView }) {
 
   return (
     <div className="grid grid-cols-[1fr_auto] items-center gap-x-2.5 gap-y-1">
-      <span className="text-[12.5px] text-ink-2">{label}</span>
-      <span className="font-mono text-[12px] font-semibold num">
+      <span className="text-meta text-ink-2">{label}</span>
+      <span className="font-mono text-meta font-semibold num">
         +{f.points} of {f.max_points}
       </span>
       <span
@@ -83,7 +83,7 @@ function LedgerRow({ factor: f }: { factor: FactorView }) {
           style={{ width: `${Math.max(pct, pct === 0 ? 0 : 2)}%` }}
         />
       </span>
-      {f.reason && <span className="col-span-full text-[11.5px] text-ink-3">{f.reason}</span>}
+      {f.reason && <span className="col-span-full text-label text-ink-3">{f.reason}</span>}
     </div>
   );
 }
