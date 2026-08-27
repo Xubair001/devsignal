@@ -26,6 +26,14 @@ type countingProvider struct {
 
 func (c *countingProvider) ModelID() string { return "stage-fake-model" }
 
+// ExtractWith ignores the task. This fake counts CALLS, which is what the cache
+// assertions turn on, and the task does not change that.
+func (c *countingProvider) ExtractWith(
+	ctx context.Context, _ enrich.Task, text string,
+) (enrich.Raw, error) {
+	return c.Extract(ctx, text)
+}
+
 func (c *countingProvider) Extract(context.Context, string) (enrich.Raw, error) {
 	c.calls.Add(1)
 	if c.err != nil {

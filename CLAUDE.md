@@ -145,6 +145,28 @@ an ontology and a way to write profile skills, and both are built:
   Extraction is the asymmetric case — an unrecognised phrase there is evidence from a posting and
   is kept.
 
+**Resume skills extract too, and `--role=resume-skills` is where the privacy rule lives.** The
+resume text is REDACTED before it leaves the process: the leading header block goes (located by the
+first section heading, falling back to the opening 200 characters), then every email address, URL,
+phone-shaped number and 7+ digit run. What was sent is recorded on the `resume` row —
+`skills_field_set`, `skills_redaction_version`, and counts, never values.
+
+The record lives on the resume row rather than in the shared `extraction` table on purpose.
+`extraction` is keyed on a content hash and has no `user_id`, so a resume extraction cached there
+would be user-derived data erasure could not scope a delete to. On the resume row it cascades with a
+store already in the inventory, so this added no new erasure location.
+
+Two things the redactor got wrong first, both found by running it rather than reading it:
+`profile.cleanText` collapses every newline to a space before the text is stored, so an earlier
+line-counting header drop was a **complete no-op in production** while cheerfully recording "6
+header lines dropped" — the candidate's name was reaching the model. And the URL pattern required a
+scheme, so `linkedin.com/in/firstname-lastname` in the body would have leaked. Both have regression
+tests over the flattened one-line form that production actually stores.
+
+Seniority and years from a resume are **recorded, never written onto the profile**. Those are the
+user's own stated preferences, and overwriting what a person typed with what a model read off their
+document is the same category error as showing an imputed salary as the employer's.
+
 Verified end to end: "Golang" → Go, "K8s" → Kubernetes, "Postgres" → PostgreSQL, "CI/CD" → cicd,
 and `--role=match` now reports `+12 of 35 from required skills (1 of 3 required skills)` with
 coverage at 90 of 100 points instead of 45. Bands read "Stretch" rather than "Not enough

@@ -32,6 +32,12 @@ type fakeProvider struct {
 
 func (f *fakeProvider) ModelID() string { return f.model }
 
+// ExtractWith ignores the task: this fake stands in for a posting read, and the
+// tests using it are about the cache and the apply path rather than the prompt.
+func (f *fakeProvider) ExtractWith(ctx context.Context, _ Task, text string) (Raw, error) {
+	return f.Extract(ctx, text)
+}
+
 func (f *fakeProvider) Extract(context.Context, string) (Raw, error) {
 	f.calls.Add(1)
 	if f.err != nil {

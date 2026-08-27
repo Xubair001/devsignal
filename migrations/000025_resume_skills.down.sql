@@ -1,0 +1,13 @@
+DROP INDEX IF EXISTS idx_resume_needs_skills;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_seniority_claimed;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_years_claimed;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_resolved;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_found;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_sent_chars;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_redacted_chars;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_field_set;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_redaction_version;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_schema_version;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_prompt_version;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_model_id;
+ALTER TABLE resume DROP COLUMN IF EXISTS skills_extracted_at;

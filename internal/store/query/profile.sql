@@ -217,3 +217,69 @@ SELECT s.id, s.canonical_slug::text AS slug, s.display_name
   FROM skill_alias a JOIN skill s ON s.id = a.skill_id
  WHERE a.alias = sqlc.arg(alias)::citext
  LIMIT 1;
+
+-- name: ResumesNeedingSkills :many
+-- Resumes whose text is parsed but whose skills have not been extracted, or were
+-- extracted under a superseded prompt, model or redaction version.
+--
+-- The version comparison is the cache: a prompt change re-extracts, an unchanged
+-- prompt does not. Hard rule 8 applied to resumes — re-extracting under the same
+-- inputs would make a profile's skills flap for a document that did not change.
+SELECT r.id, r.user_id, r.text_object_key, r.skills_extracted_at
+  FROM resume r
+ -- 'text_extracted' is the state a successful upload reaches, not 'parsed'.
+ -- The latter is reserved for a structured parse that does not exist yet, and
+ -- filtering on it meant this query matched nothing at all — a batch that
+ -- reports "nothing to do" for every resume is indistinguishable from one that
+ -- is working.
+ WHERE r.parse_state IN ('text_extracted', 'parsed')
+   AND r.deleted_at IS NULL
+   AND r.text_object_key IS NOT NULL
+   AND (r.skills_extracted_at IS NULL
+        OR r.skills_prompt_version IS DISTINCT FROM sqlc.arg(prompt_version)::text
+        OR r.skills_model_id IS DISTINCT FROM sqlc.arg(model_id)::text
+        OR r.skills_redaction_version IS DISTINCT FROM sqlc.arg(redaction_version)::text)
+ ORDER BY r.uploaded_at DESC
+ LIMIT sqlc.arg(max_rows)::int;
+
+-- name: RecordResumeSkillExtraction :exec
+-- Stamps what was sent, to whom, and what came back.
+--
+-- The counts are counts, never values. "3 email addresses removed" is auditable;
+-- the addresses themselves would put the PII back into the record we keep to
+-- prove we did not retain it.
+UPDATE resume
+   SET skills_extracted_at      = now(),
+       skills_model_id          = sqlc.arg(model_id),
+       skills_prompt_version    = sqlc.arg(prompt_version),
+       skills_schema_version    = sqlc.arg(schema_version),
+       skills_redaction_version = sqlc.arg(redaction_version),
+       skills_field_set         = sqlc.arg(field_set),
+       skills_redacted_chars    = sqlc.arg(redacted_chars),
+       skills_sent_chars        = sqlc.arg(sent_chars),
+       skills_found             = sqlc.arg(skills_found),
+       skills_resolved          = sqlc.arg(skills_resolved),
+       skills_years_claimed     = sqlc.narg(years_claimed),
+       skills_seniority_claimed = sqlc.narg(seniority_claimed)
+ WHERE id = sqlc.arg(id);
+
+-- name: DeleteResumeOriginSkills :execrows
+-- Clears skills this user's RESUMES contributed, leaving manual ones intact.
+--
+-- The mirror of DeleteManualProfileSkills. Re-extracting a resume must replace
+-- what that resume claimed without discarding what the person typed by hand — a
+-- manual entry is a stated claim and a resume reading is evidence, and evidence
+-- being refreshed is not a reason to drop the claim.
+DELETE FROM profile_skill WHERE user_id = $1 AND origin = 'resume';
+
+-- name: GetResumeSkillProvenance :one
+-- What a user can be told about their own resume extraction.
+SELECT r.id, r.filename, r.skills_extracted_at, r.skills_model_id,
+       r.skills_redaction_version, r.skills_field_set,
+       r.skills_found, r.skills_resolved,
+       r.skills_years_claimed, r.skills_seniority_claimed
+  FROM resume r
+ WHERE r.user_id = sqlc.arg(user_id) AND r.deleted_at IS NULL
+   AND r.skills_extracted_at IS NOT NULL
+ ORDER BY r.skills_extracted_at DESC
+ LIMIT 1;

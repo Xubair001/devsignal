@@ -90,6 +90,9 @@ type Raw struct {
 type Provider interface {
 	// Extract returns the model's raw JSON for one posting.
 	Extract(ctx context.Context, text string) (Raw, error)
+	// ExtractWith runs an arbitrary task — a posting, a resume — through the
+	// same client, timeouts and error classification.
+	ExtractWith(ctx context.Context, task Task, text string) (Raw, error)
 	// ModelID identifies the model in the cache key, so changing tier
 	// invalidates cached extractions rather than mixing them.
 	ModelID() string
@@ -144,6 +147,11 @@ func NewClaudeProvider(cfg ClaudeConfig) (*ClaudeProvider, error) {
 func (p *ClaudeProvider) ModelID() string { return p.model }
 
 func (p *ClaudeProvider) Extract(ctx context.Context, text string) (Raw, error) {
+	return p.ExtractWith(ctx, PostingTask(), text)
+}
+
+// ExtractWith runs an arbitrary task.
+func (p *ClaudeProvider) ExtractWith(ctx context.Context, task Task, text string) (Raw, error) {
 	text = strings.TrimSpace(text)
 	if len(text) < MinTextToExtract {
 		return Raw{}, ErrEmptyInput
@@ -159,13 +167,13 @@ func (p *ClaudeProvider) Extract(ctx context.Context, text string) (Raw, error) 
 		// precisely what prompt caching requires — and why nothing volatile may
 		// be added to it.
 		System: []anthropic.TextBlockParam{{
-			Text:         Instructions,
+			Text:         task.Instructions,
 			CacheControl: anthropic.NewCacheControlEphemeralParam(),
 		}},
 		// Schema-constrained output: a malformed shape is rejected by the API
 		// rather than by our parser, so we never pay to re-run a bad parse.
 		OutputConfig: anthropic.OutputConfigParam{
-			Format: anthropic.JSONOutputFormatParam{Schema: JSONSchema()},
+			Format: anthropic.JSONOutputFormatParam{Schema: task.Schema()},
 		},
 		// The volatile part goes AFTER the cached breakpoint.
 		Messages: []anthropic.MessageParam{
