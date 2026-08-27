@@ -35,10 +35,18 @@ quality. Behavioural labels replace the rubric at step 17.
 behavioural evaluation set that will replace the rubric labels, and the ranking decision record
 blueprint §32 requires. Nothing there updates or deletes — un-saving appends.
 
-The console covers nine routes now, not four: sign-in, today's feed, saved, the corpus browser and
-posting detail, profile (preferences, skills, resume upload, verified erasure), notification
-settings with the digest history, plus the operations surfaces — overview, sources, merge review
-and flags.
+The web front end is public at `/` (landing), `/login` and `/register`, with the console under
+`/app`. Separated rather than switching on the session at the root, so a deep link means one thing
+whoever follows it.
+
+**RBAC is a role on the identity, not a lookup.** `Authenticate` already loads the user row, so
+`auth.Identity` carries `Role` and revoking admin takes effect on the very next request.
+`RequireAdmin` reads the context and answers **404, not 403** — a 403 confirms the surface exists.
+`/api/v1/me` returns `role` and `is_admin` so the console can hide what the caller cannot use; that
+is usability, and the server gate is the boundary. `navFor(isAdmin)` filters the sidebar, the mobile
+drawer and the ⌘K palette from one source, because three lists that each decide what exists is how a
+hidden destination stays reachable from one of them. Verified with a real member account: `role:
+"user"`, 404 on all four admin endpoints, own surfaces 200.
 
 `/internal/admin` is the operations surface: source health with a quarantine toggle, full
 provenance with a working un-merge, the merge-candidate and listing-flag review queues, re-run

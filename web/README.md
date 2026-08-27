@@ -80,20 +80,41 @@ Meaning is never carried by colour alone: every `Pill` tone ships a glyph, and t
 
 ## Routes
 
-| Route | What it is |
-|---|---|
-| `/feed` | Today's feed with the fit ledger, save/apply, dismiss-with-reason |
-| `/saved` | Saved roles, each with its current liveness state |
-| `/browse`, `/browse/:id` | The corpus, filtered and keyset-paginated, plus posting detail |
-| `/profile` | Preferences, skills, resume upload, account erasure |
-| `/settings` | Digest consent, quiet hours, caps, minimum band, send history |
-| `/` | Operations overview: SLOs, pipeline state, liveness recency |
-| `/sources` | Source table with yield, quarantine and purge |
-| `/merges` | Merge candidates dedup withheld for a human |
-| `/flags` | The listing-flag queue |
+Public at the root, the console under `/app`. Separated rather than switching on the session at
+`/`, because a deep link has to mean one thing: `/app/browse/:id` is always the console and `/` is
+always the public page, whoever is looking.
 
-Sign-in is a gate in `AppShell`: no page mounts against a 401, because a screen that fires four
-queries and then shows four error cards is worse than one login form.
+| Route | Who | What it is |
+|---|---|---|
+| `/` | public | Landing page |
+| `/login`, `/register` | public | Two routes over one form — a browser password manager keys on the URL |
+| `/app/feed` | member | Today's feed with the fit ledger, save/apply, dismiss-with-reason |
+| `/app/saved` | member | Saved roles, each with its current liveness state |
+| `/app/browse`, `/app/browse/:id` | member | The corpus, filtered and keyset-paginated, plus posting detail |
+| `/app/profile` | member | Preferences, skills, resume upload, account erasure |
+| `/app/settings` | member | Digest consent, quiet hours, caps, minimum band, send history |
+| `/app/overview` | **operator** | SLOs, pipeline state, liveness recency |
+| `/app/sources` | **operator** | Source table with yield, quarantine and purge |
+| `/app/merges` | **operator** | Merge candidates dedup withheld for a human |
+| `/app/flags` | **operator** | The listing-flag queue |
+
+`/app` redirects to the feed for every role: the overview reads the admin-gated SLO report, so
+making it the landing screen would greet a member with a surface they cannot load.
+
+## Access control
+
+`RequireAuth` redirects to `/login` and carries the attempted path, so signing in returns you where
+you were going. `RequireAdmin` gates the operator routes.
+
+**Neither is a security boundary.** The server gates `/internal/admin` independently and answers
+404 to a non-admin. These exist so a member never sees a link to a page that would only show them
+an error, and so a bookmarked operator URL degrades into a clear message rather than four failed
+queries. The client-side refusal deliberately uses the same "does not exist" language the API does:
+telling someone a page exists but is forbidden is information they did not have.
+
+`navFor(isAdmin)` filters the sidebar, the mobile drawer and the ⌘K palette from **one** source.
+Three lists that each decide what exists is how a hidden destination stays reachable from one of
+them.
 
 ## Structure
 
@@ -125,6 +146,21 @@ tag is invisible to both compilers — Go builds, `tsc` passes, the field arrive
 `internal/apicontract` covers that: a reflection test listing every json path this console reads,
 which fails if one is renamed or removed. It needs no database and runs on every `make test`. If
 you add a field to a card, add its path there too.
+
+## Typography and spacing
+
+Nine named type steps, in `index.css`, each with its own line height. The values were set **from**
+an audit rather than chosen first: the interface had drifted to 21 distinct hardcoded `text-[Npx]`
+values, and these are where they actually clustered. Nothing may use an arbitrary pixel size again —
+`grep -rhoE "text-\[[0-9.]+px\]" src/` should return nothing.
+
+`Card` takes an enumerated `pad` (`none` / `tight` / `normal`) rather than a padding className. The
+same audit found seven paddings in use for the same job, which is what makes a set of cards read as
+unrelated rectangles instead of one system. Padding tightens on small screens in `Card` alone, so no
+page has to remember to.
+
+Wide content scrolls inside its own container — never by making the page body pan sideways, which is
+the most common responsive failure and is always a table.
 
 ## Theme
 
