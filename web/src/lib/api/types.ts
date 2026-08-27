@@ -374,6 +374,16 @@ export type Session = {
    * non-admin, because a hidden link is not an access control.
    */
   is_admin: boolean;
+  /**
+   * Whether the address has been confirmed.
+   *
+   * Load-bearing rather than cosmetic: the digest never mails an unverified
+   * address — that is how a sending domain's reputation is lost, and it may not
+   * even be the user's address — so an unverified account can configure the
+   * digest and still receive nothing. Surfacing it is the difference between a
+   * fixable prompt and a silent dead end.
+   */
+  email_verified: boolean;
 };
 
 export type LoginResponse = {

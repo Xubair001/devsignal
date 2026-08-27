@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { CommandPalette } from './CommandPalette';
 import { navFor } from './nav';
 import { useSession } from '@/features/auth/useSession';
+import { VerifyBanner } from '@/features/auth/VerifyBanner';
 import { Container } from '@/components/ui/Container';
 
 /**
@@ -203,6 +204,7 @@ export function AppShell() {
         </header>
 
         <Container as="main" gutter="app" className="flex-1 py-5 sm:py-7">
+          <VerifyBanner />
           <Outlet />
         </Container>
 

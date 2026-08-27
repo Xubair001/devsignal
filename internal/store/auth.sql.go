@@ -11,6 +11,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeUserToken = `-- name: ConsumeUserToken :one
+UPDATE user_token
+   SET consumed_at = now()
+ WHERE token_hash = $1
+   AND purpose = $2
+   AND consumed_at IS NULL
+   AND expires_at > now()
+RETURNING id, user_id, purpose, token_hash, consumed_at, expires_at, created_at
+`
+
+type ConsumeUserTokenParams struct {
+	TokenHash []byte
+	Purpose   string
+}
+
+// Claims a token, atomically, exactly once.
+//
+// The UPDATE is the claim: consumed_at IS NULL in the WHERE clause means two
+// concurrent requests cannot both succeed, and a replayed link finds nothing.
+// Expiry is checked here too rather than in Go, so a clock difference between
+// process and database cannot widen the window.
+func (q *Queries) ConsumeUserToken(ctx context.Context, arg ConsumeUserTokenParams) (UserToken, error) {
+	row := q.db.QueryRow(ctx, consumeUserToken, arg.TokenHash, arg.Purpose)
+	var i UserToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Purpose,
+		&i.TokenHash,
+		&i.ConsumedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const countAuditEntries = `-- name: CountAuditEntries :one
 SELECT count(*) FROM audit_log
 `
@@ -142,6 +178,69 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser
 		&i.Role,
 	)
 	return i, err
+}
+
+const createUserToken = `-- name: CreateUserToken :one
+INSERT INTO user_token (user_id, purpose, token_hash, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, purpose, token_hash, consumed_at, expires_at, created_at
+`
+
+type CreateUserTokenParams struct {
+	UserID    pgtype.UUID
+	Purpose   string
+	TokenHash []byte
+	ExpiresAt pgtype.Timestamptz
+}
+
+// A single-use token for a transactional flow: email verification or a password
+// reset.
+//
+// Only the HASH is stored, like a session token. A leaked database must not hand
+// someone else's verification link to whoever read it, and the plaintext exists
+// only long enough to put in an email.
+func (q *Queries) CreateUserToken(ctx context.Context, arg CreateUserTokenParams) (UserToken, error) {
+	row := q.db.QueryRow(ctx, createUserToken,
+		arg.UserID,
+		arg.Purpose,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
+	var i UserToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Purpose,
+		&i.TokenHash,
+		&i.ConsumedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const expireUserTokensOfPurpose = `-- name: ExpireUserTokensOfPurpose :execrows
+UPDATE user_token SET consumed_at = now()
+ WHERE user_id = $1 AND purpose = $2
+   AND consumed_at IS NULL
+`
+
+type ExpireUserTokensOfPurposeParams struct {
+	UserID  pgtype.UUID
+	Purpose string
+}
+
+// Invalidates a user's outstanding tokens for one purpose.
+//
+// Called when a new one is issued, so "resend" cannot leave two live links: the
+// older one stops working the moment a newer is created, which is what makes the
+// most recent email the only one that matters.
+func (q *Queries) ExpireUserTokensOfPurpose(ctx context.Context, arg ExpireUserTokensOfPurposeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireUserTokensOfPurpose, arg.UserID, arg.Purpose)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getLastAuditHash = `-- name: GetLastAuditHash :one

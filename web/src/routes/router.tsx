@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/features/shell/AppShell';
 import { RequireAuth, RequireAdmin } from '@/features/auth/RequireAuth';
 import { AuthPage } from '@/features/auth/AuthPage';
+import { VerifyPage } from '@/features/auth/VerifyPage';
 import { LandingPage } from '@/features/landing/LandingPage';
 import { OverviewPage } from '@/features/overview/OverviewPage';
 import { SourcesPage } from '@/features/sources/SourcesPage';
@@ -32,6 +33,9 @@ export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
   { path: '/login', element: <AuthPage mode="login" /> },
   { path: '/register', element: <AuthPage mode="register" /> },
+  /* Public: a verification link is followed in whatever browser opened the
+     email, which may hold no session. The single-use token is the authority. */
+  { path: '/verify', element: <VerifyPage /> },
 
   {
     element: <RequireAuth />,

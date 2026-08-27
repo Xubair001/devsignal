@@ -51,6 +51,20 @@ func (h *Handler) Routes() chi.Router {
 	r.Post("/login", h.login)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
+	// Unauthenticated: a verification link is followed in whatever browser opened
+	// the email, and the single-use token is the authorization.
+	r.Post("/verify", h.verify)
+	return r
+}
+
+// AccountRoutes are the authenticated account actions.
+//
+// Separate from Routes() because these need a session and those must not. A
+// resend that accepted an email address without one would be an enumeration
+// oracle and a way to have us mail strangers on request.
+func (h *Handler) AccountRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.Post("/resend-verification", h.resendVerification)
 	return r
 }
 
@@ -89,12 +103,89 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	tok, _, err := h.svc.Register(r.Context(), req.Email, req.Password, r.UserAgent())
+	tok, ident, err := h.svc.Register(r.Context(), req.Email, req.Password, r.UserAgent())
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
+
+	// Issue the verification link, but never fail the registration on it. The
+	// account exists and the address is unverified either way; a resend is one
+	// click, and refusing the signup because mail is down would lose the account.
+	// The plaintext token is DISCARDED here — it only ever leaves through the
+	// transport, never through this response.
+	if _, verr := h.svc.IssueEmailVerification(r.Context(), ident.UserID, req.Email); verr != nil {
+		h.log.Error("issuing email verification",
+			"user_id", ident.UserID.String(), "err", verr)
+	}
 	writeJSON(w, http.StatusCreated, newTokensResponse(tok))
+}
+
+type verifyRequest struct {
+	Token string `json:"token"`
+}
+
+// verify consumes a verification link.
+//
+// Unauthenticated on purpose: the link arrives by email and is followed in
+// whatever browser opened it, which may hold no session. The token IS the
+// authorization, and it is single-use.
+func (h *Handler) verify(w http.ResponseWriter, r *http.Request) {
+	req, err := decode[verifyRequest](r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if req.Token == "" {
+		writeJSON(w, http.StatusBadRequest, errorBody{Error: "token is required"})
+		return
+	}
+	if _, verr := h.svc.VerifyEmail(r.Context(), req.Token); verr != nil {
+		if errors.Is(verr, ErrVerificationInvalid) {
+			// One message for expired, used and unknown alike. Distinguishing them
+			// tells a caller whether an address is registered.
+			writeJSON(w, http.StatusBadRequest, errorBody{
+				Error: "this link is invalid or has expired. Request a new one."})
+			return
+		}
+		h.log.Error("verifying email", "err", verr)
+		writeJSON(w, http.StatusInternalServerError, errorBody{
+			Error: "could not verify the address"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// resendVerification issues a fresh link for the CALLER's own address.
+//
+// Authenticated, and takes no email parameter. An unauthenticated resend that
+// accepts an address is an email-enumeration oracle and a way to have us mail
+// strangers on request.
+func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
+	id, ok := FromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorBody{Error: "unauthenticated"})
+		return
+	}
+	user, err := h.svc.q.GetUserByID(r.Context(), id.UserID)
+	if err != nil {
+		h.log.Error("loading user for resend", "user_id", id.UserID.String(), "err", err)
+		writeJSON(w, http.StatusInternalServerError, errorBody{
+			Error: "could not send the email"})
+		return
+	}
+	if _, verr := h.svc.IssueEmailVerification(r.Context(), id.UserID, string(user.Email)); verr != nil {
+		if errors.Is(verr, ErrAlreadyVerified) {
+			// Not an error. Idempotent from the caller's point of view.
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.log.Error("resending verification", "user_id", id.UserID.String(), "err", verr)
+		writeJSON(w, http.StatusInternalServerError, errorBody{
+			Error: "could not send the email"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {

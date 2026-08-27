@@ -36,6 +36,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
 	"github.com/Xubair001/devsignal/internal/loadtest"
+	"github.com/Xubair001/devsignal/internal/mail"
 	"github.com/Xubair001/devsignal/internal/matching"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
@@ -270,6 +271,21 @@ func buildRouter(
 	})
 
 	authSvc := auth.NewService(pool, log, auth.DefaultPolicy(), nil)
+
+	// The transport for transactional mail. Shared with the digest and gated on
+	// nothing: a user who withdraws digest consent still needs to verify an
+	// address. An unconfigured transport is a WARNING, not a failure — the token
+	// is still issued and recorded, so a signup never fails because mail is down.
+	mailer, merr := mail.NewSender(cfg.MailSender, cfg.MailLogDir, nil)
+	if merr != nil {
+		// A misconfigured transport stops startup. An UNCONFIGURED one does not —
+		// that is mail.NullSender, which refuses loudly per message. The
+		// difference matters: a typo in MAIL_SENDER must not silently disable mail.
+		return nil, fmt.Errorf("mail transport: %w", merr)
+	}
+	authSvc = authSvc.WithMailer(mailer, cfg.PublicBaseURL)
+	log.Info("mail transport ready", "sender", mailer.Name(),
+		"verification_links_point_at", cfg.PublicBaseURL)
 	authH := auth.NewHandler(authSvc, log)
 
 	// One instance, shared: the feed and the browse list must answer with the
@@ -335,6 +351,9 @@ func buildRouter(
 			// Notification settings and the digest history. The caller's own data,
 			// so it reads identity from the context like everything else here.
 			priv.Mount("/notifications", digestH.Routes())
+			// Authenticated account actions. Resending a verification link needs a
+			// session so it can only ever target the caller's own address.
+			priv.Mount("/account", authH.AccountRoutes())
 			// The role travels to the client so the console can hide surfaces the
 			// caller cannot use. That is a USABILITY measure, not the security
 			// boundary: /internal/admin is still gated server-side and answers 404
@@ -347,8 +366,10 @@ func buildRouter(
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprintf(w,
-					`{"user_id":%q,"tenant_id":%q,"role":%q,"is_admin":%t}`,
-					id.UserID.String(), id.TenantID.String(), id.Role, id.IsAdmin())
+					`{"user_id":%q,"tenant_id":%q,"role":%q,"is_admin":%t,`+
+						`"email_verified":%t}`,
+					id.UserID.String(), id.TenantID.String(), id.Role, id.IsAdmin(),
+					id.EmailVerified)
 			})
 		})
 	})

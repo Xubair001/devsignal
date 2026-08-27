@@ -54,8 +54,18 @@ type Config struct {
 	// reports success while delivering nothing is the failure hard rule 26 is
 	// about. "log" renders each digest to DigestLogDir and delivers nothing,
 	// which is how step 18 is verifiable without a provider.
-	DigestSender string
-	DigestLogDir string
+	// MailSender and MailLogDir configure the shared transport used by BOTH the
+	// digest and transactional mail (verification, password reset). They share a
+	// transport and never a consent gate.
+	//
+	// DIGEST_SENDER / DIGEST_LOG_DIR are still read as fallbacks so an existing
+	// .env keeps working — the digest shipped first and named them.
+	MailSender string
+	MailLogDir string
+	// PublicBaseURL is where a verification link points. Without it the link is
+	// unusable, so it defaults to the local console rather than to an empty
+	// string that would produce "/verify?token=...".
+	PublicBaseURL string
 
 	OTelEnabled     bool
 	OTelExporter    string
@@ -90,8 +100,9 @@ func Load() (*Config, error) {
 		ExtractionModel:           str("EXTRACTION_MODEL", ""),
 		ExtractionProvider:        str("EXTRACTION_PROVIDER", ""),
 		ExtractionReasoningEffort: str("EXTRACTION_REASONING_EFFORT", ""),
-		DigestSender:              str("DIGEST_SENDER", "none"),
-		DigestLogDir:              str("DIGEST_LOG_DIR", "./tmp/digests"),
+		MailSender:                str("MAIL_SENDER", str("DIGEST_SENDER", "none")),
+		MailLogDir:                str("MAIL_LOG_DIR", str("DIGEST_LOG_DIR", "./tmp/mail")),
+		PublicBaseURL:             str("PUBLIC_BASE_URL", "http://localhost:5174"),
 		OTelEnabled:               boolean("OTEL_ENABLED", true),
 		OTelExporter:              str("OTEL_EXPORTER", "stdout"),
 		OTelServiceName:           str("OTEL_SERVICE_NAME", "devsignal"),

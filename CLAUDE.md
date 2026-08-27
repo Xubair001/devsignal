@@ -76,6 +76,22 @@ posting attached, so a card had no company, salary, apply link or liveness — t
 claim. See hard rule 27. The feed DTO now embeds `opportunity.Summary`, shared with the browse list
 so the two cannot drift.
 
+**Email verification is built and is the transactional half of `internal/mail`.** Transactional
+mail and the digest share a **transport** and never a consent gate — a user who withdraws digest
+consent still needs to verify an address and reset a password, so the consent check lives in
+`internal/digest` and deliberately not in the transport. `MAIL_SENDER=log` writes the message,
+link included, to `MAIL_LOG_DIR`, which is what makes signup completable with no provider.
+
+A verification link works **exactly once**: `ConsumeUserToken` claims it with
+`consumed_at IS NULL` in the WHERE clause, so two concurrent requests cannot both win and a
+replayed link finds nothing. Expiry is checked in SQL, not Go, so a clock difference between
+process and database cannot widen the window. Only the hash is stored. A resend supersedes the
+outstanding link rather than adding a second one. Expired, spent and never-issued all report
+**identically** — distinguishing them tells a caller whether an address is registered. A send
+failure never fails the signup: the account exists either way and a resend is one click.
+`/api/v1/me` returns `email_verified`, because the digest refuses to mail an unverified address
+and without that the console would be a silent dead end.
+
 `--role=digest` is step 18. Everything blueprint §4.3 requires is built — a structural daily cap,
 a weekly cap, quiet hours in the user's own timezone, a minimum **band** to interrupt on, and the
 explicit empty case — with the transport behind a `Sender` interface. `DIGEST_SENDER=log` renders

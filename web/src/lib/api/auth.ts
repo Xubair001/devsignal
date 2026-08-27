@@ -26,4 +26,15 @@ export const authApi = {
   },
 
   me: () => http.get<Session>('/api/v1/me'),
+
+  /** Consumes a link from an email. Unauthenticated: the token is the authority. */
+  verifyEmail: (token: string) => http.post<void>('/api/v1/auth/verify', { token }),
+
+  /**
+   * Issues a fresh link for the CALLER's own address.
+   *
+   * Takes no email parameter, deliberately: an endpoint that accepted one would
+   * be an enumeration oracle and a way to have us mail strangers on request.
+   */
+  resendVerification: () => http.post<void>('/api/v1/account/resend-verification'),
 };

@@ -31,6 +31,9 @@ export function useSession() {
     /* Defaults to false while loading and for a signed-out caller, so a surface
        gated on it is hidden by default rather than exposed by default. */
     isAdmin: q.data?.is_admin === true,
+    /* Same default-closed reasoning as isAdmin: unknown reads as unverified, so
+       a prompt appears rather than a capability being assumed. */
+    emailVerified: q.data?.email_verified === true,
     unauthorized: token() === null || unauthorized,
     refetch: q.refetch,
   };
