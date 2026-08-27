@@ -11,6 +11,7 @@ import { IconButton } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { EmptyState, ErrorState, SectionHead, Skeleton } from '@/components/ui/States';
 import { cn } from '@/components/ui/cn';
+import { PurgeSource } from '@/features/admin/PurgeSource';
 
 type SortKey = 'name' | 'status' | 'postings' | 'yield' | 'polled';
 const PER_PAGE = 8;
@@ -263,6 +264,11 @@ export function SourcesPage() {
                             </svg>
                           </IconButton>
                         )}
+
+                        {/* Purge is the destructive one, so it is a labelled
+                            button rather than an icon: an icon is too easy to hit
+                            by accident for an action that deletes postings. */}
+                        <PurgeSource sourceID={s.id} sourceName={s.name} />
                       </span>
                     </td>
                   </tr>

@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState, SkeletonCards } from '@/components/ui/States';
 import { formatMoney, formatLocation, relativeTime } from '@/lib/format';
 import { cn } from '@/components/ui/cn';
+import { ProvenancePanel } from '@/features/admin/ProvenancePanel';
+import { ReportListing } from '@/features/feed/ReportListing';
+import { useSession } from '@/features/auth/useSession';
 
 /**
  * One posting in full.
@@ -20,6 +23,7 @@ import { cn } from '@/components/ui/cn';
  */
 export function OpportunityPage() {
   const { id = '' } = useParams();
+  const { isAdmin } = useSession();
   const q = useQuery({
     queryKey: qk.opportunity(id),
     queryFn: () => opportunitiesApi.get(id),
@@ -157,6 +161,17 @@ export function OpportunityPage() {
           </ul>
         )}
       </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <ReportListing opportunityID={p.id} title={p.title} />
+        <p className="text-meta text-ink-3">
+          Reporting flags it for an operator; it does not remove the posting.
+        </p>
+      </div>
+
+      {/* Operators only. A member has no use for provenance and the endpoint
+          answers 404 to them anyway. */}
+      {isAdmin && <ProvenancePanel opportunityID={p.id} />}
 
       {p.description_html && (
         <Card>

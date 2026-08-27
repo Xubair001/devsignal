@@ -1,5 +1,5 @@
-import type { FactorView, FitView } from '@/lib/api/types';
-import { cn } from '@/components/ui/cn';
+import type { FactorView, FitView } from "@/lib/api/types";
+import { cn } from "@/components/ui/cn";
 
 /**
  * The explanation, rendered as the arithmetic that produced it.
@@ -21,34 +21,44 @@ export function FitLedger({ fit }: { fit: FitView }) {
       ))}
 
       {/* A table fallback for screen readers: the breakdown is the product's
-          core claim, so it has to be readable as text, not only as bars. */}
-      <table className="sr-only">
-        <caption>Fit breakdown, {fit.points} of a possible {fit.max_points} points</caption>
-        <thead>
-          <tr>
-            <th>Factor</th>
-            <th>Points earned</th>
-            <th>Points achievable</th>
-            <th>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fit.factors.map((f) => (
-            <tr key={f.factor}>
-              <td>{f.factor}</td>
-              <td>{f.scored ? f.points : 'not scored'}</td>
-              <td>{f.scored ? f.max_points : 'not applicable'}</td>
-              <td>{f.reason ?? ''}</td>
+          core claim, so it has to be readable as text, not only as bars.
+
+          The sr-only lives on a WRAPPER, not on the table. Tailwind's sr-only
+          sets width:1px with overflow:hidden, and a <table> ignores any width
+          below its min-content — so `sr-only` directly on the table let it grow
+          to 688px and pan the whole page sideways at a 320px viewport. A div
+          honours the clip; the table inside it is then free to be a table. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            Fit breakdown, {fit.points} of a possible {fit.max_points} points
+          </caption>
+          <thead>
+            <tr>
+              <th>Factor</th>
+              <th>Points earned</th>
+              <th>Points achievable</th>
+              <th>Note</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {fit.factors.map((f) => (
+              <tr key={f.factor}>
+                <td>{f.factor}</td>
+                <td>{f.scored ? f.points : "not scored"}</td>
+                <td>{f.scored ? f.max_points : "not applicable"}</td>
+                <td>{f.reason ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 function LedgerRow({ factor: f }: { factor: FactorView }) {
-  const label = f.factor.replace(/_/g, ' ');
+  const label = f.factor.replace(/_/g, " ");
 
   /* An unscored factor is recessed and labelled in words."We could not read
      this posting's required skills" and"you match none of them" are opposite
@@ -57,8 +67,12 @@ function LedgerRow({ factor: f }: { factor: FactorView }) {
     return (
       <div className="grid grid-cols-[1fr_auto] items-center gap-x-2.5 gap-y-1">
         <span className="text-meta text-ink-3">{label}</span>
-        <span className="text-meta font-medium italic text-ink-3">not scored</span>
-        {f.reason && <span className="col-span-full text-label text-null">{f.reason}</span>}
+        <span className="text-meta font-medium italic text-ink-3">
+          not scored
+        </span>
+        {f.reason && (
+          <span className="col-span-full text-label text-null">{f.reason}</span>
+        )}
       </div>
     );
   }
@@ -77,13 +91,15 @@ function LedgerRow({ factor: f }: { factor: FactorView }) {
       >
         <span
           className={cn(
-            'block h-full rounded-sm transition-[width] duration-600 ease-out-quart',
-            pct === 0 ? 'bg-line-strong' : 'bg-brand',
+            "block h-full rounded-sm transition-[width] duration-600 ease-out-quart",
+            pct === 0 ? "bg-line-strong" : "bg-brand",
           )}
           style={{ width: `${Math.max(pct, pct === 0 ? 0 : 2)}%` }}
         />
       </span>
-      {f.reason && <span className="col-span-full text-label text-ink-3">{f.reason}</span>}
+      {f.reason && (
+        <span className="col-span-full text-label text-ink-3">{f.reason}</span>
+      )}
     </div>
   );
 }

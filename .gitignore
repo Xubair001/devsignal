@@ -40,3 +40,7 @@ web/*.tsbuildinfo
 # Rendered digests from DIGEST_SENDER=log. These are real user-facing content
 # addressed to a real address, so they are development output, never artefacts.
 tmp/
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/.playwright/

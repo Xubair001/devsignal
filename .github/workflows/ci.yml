@@ -165,3 +165,19 @@ jobs:
       # field — so a type error here is a product bug, not a nit.
       - name: typecheck and build
         run: npm run build
+
+      # The two bug classes `tsc` cannot see: a page that pans sideways on a
+      # phone, and a surface a role should not reach. Both were found by hand and
+      # both would come back silently.
+      #
+      # Public pages only in CI: the console suite needs a live API and a seeded
+      # session, which this job deliberately does not have — a responsive test
+      # against a login redirect proves nothing. Run `make web-e2e` locally for
+      # the full matrix.
+      - name: install a browser
+        run: npx playwright install --with-deps chromium
+
+      - name: responsive tests
+        run: npx playwright test --grep "public pages"
+        env:
+          CI: 'true'

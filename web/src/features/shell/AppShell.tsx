@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { CommandPalette } from './CommandPalette';
 import { navFor } from './nav';
 import { useSession } from '@/features/auth/useSession';
+import { Container } from '@/components/ui/Container';
 
 /**
  * The app frame.
@@ -108,7 +109,7 @@ export function AppShell() {
       <div className="flex min-w-0 flex-col">
         {/* ------------------------------------------------------------ header */}
         <header className="sticky top-0 z-50 border-b border-glass-line bg-glass glass">
-          <div className="mx-auto flex h-[56px] max-w-[1180px] items-center gap-2 px-3 sm:h-[58px] sm:gap-2.5 sm:px-6">
+          <Container gutter="app" className="flex h-[56px] items-center gap-2 sm:h-[58px] sm:gap-2.5">
             <IconButton
               label="Open navigation"
               className="lg:hidden"
@@ -198,19 +199,19 @@ export function AppShell() {
                 )}
               </div>
             </div>
-          </div>
+          </Container>
         </header>
 
-        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-5 sm:px-6 sm:py-7">
+        <Container as="main" gutter="app" className="flex-1 py-5 sm:py-7">
           <Outlet />
-        </main>
+        </Container>
 
-        <footer className="mx-auto w-full max-w-[1180px] px-4 pb-8 sm:px-6">
+        <Container as="footer" gutter="app" className="pb-8">
           <p className="border-t border-line pt-4 text-label leading-relaxed text-ink-3">
             Bands and factor contributions, never a bare percentage. Nothing on this page is
             rendered that cannot be derived from something we observed.
           </p>
-        </footer>
+        </Container>
       </div>
 
       {/* ------------------------------------------------------------- drawer */}

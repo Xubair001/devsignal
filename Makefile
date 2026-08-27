@@ -106,6 +106,13 @@ vet: ## go vet
 	go vet $(GO_PKGS)
 
 .PHONY: lint
+web-build: ## typecheck and build the console
+	cd web && npm ci && npm run build
+
+web-e2e: ## responsive + access-control tests in a real browser
+	@echo "requires the API on :8090 and a VITE_DEV_TOKEN in web/.env.local"
+	cd web && npx playwright install --with-deps chromium && npm run test:e2e
+
 lint: ## golangci-lint + staticcheck
 	golangci-lint run $(GO_PKGS)
 	staticcheck $(GO_PKGS)

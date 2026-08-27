@@ -3,11 +3,42 @@ import type {
   FlagsResponse,
   HealthResponse,
   MergeCandidatesResponse,
+  ProvenanceResponse,
+  PurgePlan,
   SloResponse,
   SourcesResponse,
 } from './types';
 
 export const adminApi = {
+  /* --- provenance and merges ------------------------------------------- */
+
+  /** Every source row on a posting, plus what was merged into it. */
+  provenance: (id: string) =>
+    http.get<ProvenanceResponse>(`/internal/admin/opportunities/${id}/sources`),
+
+  /**
+   * Reverses a merge, restoring the exact source rows it moved.
+   *
+   * Not a flag flip: it restores data, clears merged_into and stamps
+   * unmerged_at, and dedup then skips the pair forever — a human said these are
+   * different roles and a simhash does not overrule that.
+   */
+  unmerge: (id: string, note: string) =>
+    http.post<unknown>(`/internal/admin/opportunities/${id}/unmerge`, { note }),
+
+  requeueOpportunity: (id: string, note: string) =>
+    http.post<unknown>(`/internal/admin/opportunities/${id}/requeue`, { note }),
+
+  /* --- source purge ----------------------------------------------------- */
+
+  /**
+   * Deletes a source's contribution. `confirm` must equal the plan's
+   * will_be_deleted — the server checks it, so a stale plan cannot authorise a
+   * larger delete than the operator saw.
+   */
+  purgeSource: (id: string, confirm: number, note: string) =>
+    http.post<unknown>(`/internal/admin/sources/${id}/purge`, { confirm, note }),
+
   mergeCandidates: () =>
     http.get<MergeCandidatesResponse>('/internal/admin/merge-candidates'),
   /**
@@ -37,14 +68,7 @@ export const adminApi = {
     ),
 
   /** Counts first. The returned number is the confirmation token for a purge. */
-  purgePlan: (id: string) =>
-    http.get<{
-      source_id: string;
-      total_attributed: number;
-      merged: number;
-      also_seen_elsewhere: number;
-      will_be_deleted: number;
-    }>(`/internal/admin/sources/${id}/purge-plan`),
+  purgePlan: (id: string) => http.get<PurgePlan>(`/internal/admin/sources/${id}/purge-plan`),
 
   resolveFlag: (id: string, status: 'upheld' | 'rejected' | 'duplicate', note?: string) =>
     http.post<void>(`/internal/admin/flags/${id}/resolve`, { status, note: note ?? null }),

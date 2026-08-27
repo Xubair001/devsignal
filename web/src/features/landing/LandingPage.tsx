@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ThemeToggle } from '@/features/shell/ThemeToggle';
 import { Mark } from '@/components/ui/Mark';
 import { cn } from '@/components/ui/cn';
+import { Container } from '@/components/ui/Container';
 
 /**
  * The public page.
@@ -31,8 +32,10 @@ export function LandingPage() {
 function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-glass-line bg-glass glass">
-      <div className="mx-auto flex h-[60px] max-w-[1100px] items-center gap-3 px-5 sm:px-8">
-        <Link to="/" className="flex items-center gap-2.5">
+      <Container as="nav" className="flex h-[62px] items-center gap-3 sm:h-[66px]">
+        {/* min-h keeps the tap target at the floor even though the mark is
+            smaller than it. A 28px link is a miss-tap on a phone. */}
+        <Link to="/" className="flex min-h-[36px] items-center gap-2.5">
           <Mark size={28} />
           <span className="text-lead font-bold tracking-[-0.02em]">DevSignal</span>
         </Link>
@@ -55,14 +58,14 @@ function Header() {
             Get started
           </Link>
         </nav>
-      </div>
+      </Container>
     </header>
   );
 }
 
 function Hero() {
   return (
-    <section className="mx-auto max-w-[1100px] px-5 pb-16 pt-16 sm:px-8 sm:pb-24 sm:pt-24">
+    <Container as="section" className="pb-16 pt-12 sm:pb-24 sm:pt-20">
       <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
         <div className="rise">
           <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-label font-semibold uppercase tracking-[0.07em] text-ink-3">
@@ -110,7 +113,7 @@ function Hero() {
 
         <SpecimenCard />
       </div>
-    </section>
+    </Container>
   );
 }
 
@@ -233,7 +236,7 @@ const QUESTIONS = [
 function Questions() {
   return (
     <section className="border-y border-line bg-ground-2/40">
-      <div className="mx-auto max-w-[1100px] px-5 py-16 sm:px-8 sm:py-20">
+      <Container className="py-16 sm:py-20">
         <h2 className="max-w-[30ch] text-hero font-bold leading-tight tracking-[-0.025em] sm:text-hero">
           Four questions, in order.
         </h2>
@@ -275,7 +278,7 @@ function Questions() {
             </article>
           ))}
         </div>
-      </div>
+      </Container>
     </section>
   );
 }
@@ -301,7 +304,7 @@ const RULES = [
 
 function Honesty() {
   return (
-    <section className="mx-auto max-w-[1100px] px-5 py-16 sm:px-8 sm:py-20">
+    <Container as="section" className="py-16 sm:py-20">
       <div className="grid gap-10 lg:grid-cols-[0.85fr_1fr] lg:gap-14">
         <div>
           <h2 className="text-hero font-bold leading-tight tracking-[-0.025em] sm:text-hero">
@@ -337,14 +340,14 @@ function Honesty() {
           ))}
         </ul>
       </div>
-    </section>
+    </Container>
   );
 }
 
 function Closing() {
   return (
     <section className="border-t border-line bg-ground-2/40">
-      <div className="mx-auto max-w-[1100px] px-5 py-16 text-center sm:px-8 sm:py-20">
+      <Container className="py-16 text-center sm:py-20">
         <h2 className="mx-auto max-w-[26ch] text-hero font-bold leading-tight tracking-[-0.025em] sm:text-hero">
           See what it knows, and what it does not.
         </h2>
@@ -363,7 +366,7 @@ function Closing() {
         >
           Create an account
         </Link>
-      </div>
+      </Container>
     </section>
   );
 }
@@ -371,7 +374,7 @@ function Closing() {
 function Footer() {
   return (
     <footer className="border-t border-line">
-      <div className="mx-auto flex max-w-[1100px] flex-col gap-3 px-5 py-8 sm:flex-row sm:items-center sm:px-8">
+      <Container className="flex flex-col gap-3 py-8 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2.5">
           <Mark size={22} />
           <span className="text-body font-semibold">DevSignal</span>
@@ -380,7 +383,7 @@ function Footer() {
           Early software over a small corpus. We would rather show you a short honest list than a
           long confident one.
         </p>
-      </div>
+      </Container>
     </footer>
   );
 }

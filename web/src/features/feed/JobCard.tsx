@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { FeedItem, DismissReason } from '@/lib/api/types';
-import { DISMISS_REASONS } from '@/lib/api/types';
+import { feedApi } from '@/lib/api/feed';
+import { ReportListing } from './ReportListing';
 import { formatMoney, formatLocation, relativeTime } from '@/lib/format';
 import { Card } from '@/components/ui/Card';
 import { Pill } from '@/components/ui/Pill';
@@ -8,15 +10,6 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/components/ui/cn';
 import { BandHeader } from './BandHeader';
 import { FitLedger } from './FitLedger';
-
-const REASON_LABEL: Record<DismissReason, string> = {
-  wrong_stack: 'Wrong technology stack',
-  wrong_level: 'Wrong seniority level',
-  wrong_location: 'Wrong location or work mode',
-  comp_too_low: 'Compensation too low',
-  already_applied: 'I already applied',
-  not_interested: 'Not interested',
-};
 
 type Props = {
   item: FeedItem;
@@ -30,6 +23,19 @@ const GHOST_LABEL = { elevated: 'Ghost risk: elevated', high: 'Ghost risk: high'
 
 export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
   const [picking, setPicking] = useState(false);
+
+  /* The reason set comes from the SERVER, not a client copy.
+     A dismissal reason is a training label, and the label vocabulary belongs to
+     whatever will learn from it — a hardcoded list drifts the moment the set
+     changes, and the symptom is a reason the server rejects or, worse, stores as
+     something else. Fetched only when the picker opens, and cached forever
+     because a closed set does not change within a session. */
+  const reasons = useQuery({
+    queryKey: ['dismiss-reasons'],
+    queryFn: () => feedApi.dismissReasons(),
+    staleTime: Infinity,
+    enabled: picking,
+  });
   const p = item.posting;
   const live = p.liveness;
   const where = formatLocation(p.location);
@@ -152,7 +158,11 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
           {item.state.saved ? 'Saved' : 'Save'}
         </Button>
 
-        <div className="relative ml-auto">
+        <div className="ml-auto flex items-center gap-1">
+          <ReportListing opportunityID={item.opportunity_id} title={item.title} />
+        </div>
+
+        <div className="relative">
           <Button variant="ghost" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden className="size-3.5">
               <path d="M18 6 6 18M6 6l12 12" />
@@ -171,17 +181,20 @@ export function JobCard({ item, onSave, onApply, onDismiss }: Props) {
               <p className="px-2.5 py-1.5 text-label font-semibold uppercase tracking-wider text-ink-3">
                 Why is this not a fit?
               </p>
-              {DISMISS_REASONS.map((r) => (
+              {reasons.isPending && (
+                <p className="px-2.5 py-2 text-meta text-ink-3">Loading reasons…</p>
+              )}
+              {reasons.data?.reasons.map((r) => (
                 <button
-                  key={r}
+                  key={r.value}
                   role="menuitem"
                   onClick={() => {
                     setPicking(false);
-                    onDismiss(item.opportunity_id, r);
+                    onDismiss(item.opportunity_id, r.value as DismissReason);
                   }}
                   className="flex w-full cursor-pointer rounded-md px-2.5 py-2 text-left text-body text-ink-2 transition-colors hover:bg-raised hover:text-ink"
                 >
-                  {REASON_LABEL[r]}
+                  {r.label}
                 </button>
               ))}
             </div>

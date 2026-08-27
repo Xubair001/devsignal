@@ -398,3 +398,59 @@ export type MergeCandidate = {
 };
 
 export type MergeCandidatesResponse = { candidates: MergeCandidate[] };
+
+/* ------------------------------------------------------- server-owned sets --- */
+
+/**
+ * A closed set the SERVER owns.
+ *
+ * Fetched rather than hardcoded, because a dismissal reason is a training label
+ * and the label vocabulary belongs to whatever will learn from it. A client copy
+ * drifts the moment the set changes, and the symptom is a reason the server
+ * rejects or, worse, silently stores as something else.
+ */
+export type Choice = { value: string; label: string };
+export type ChoicesResponse = { reasons: Choice[] };
+
+/* ---------------------------------------------------------- listing flags --- */
+
+export type FlagInput = { reason: string; detail?: string };
+
+/* ------------------------------------------------------------ provenance --- */
+
+export type OpportunitySource = {
+  id: string;
+  source_name: string;
+  ats_type: string | null;
+  ats_job_id: string | null;
+  apply_url: string | null;
+  /** Set when this row arrived by a merge rather than by direct ingest. */
+  merge_reason: string | null;
+  merge_confidence: number | null;
+  merged_by: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+};
+
+export type MergedIn = {
+  id: string;
+  title: string;
+  source_rows: number;
+};
+
+export type ProvenanceResponse = {
+  sources: OpportunitySource[];
+  /** Postings merged INTO this one. Each can be un-merged. */
+  merged_in: MergedIn[];
+};
+
+/* --------------------------------------------------------- source purge --- */
+
+export type PurgePlan = {
+  source_id: string;
+  total_attributed: number;
+  /** Postings this source contributed that no other source also saw. */
+  will_be_deleted: number;
+  also_seen_elsewhere: number;
+  merged: number;
+};

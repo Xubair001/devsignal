@@ -116,6 +116,26 @@ telling someone a page exists but is forbidden is information they did not have.
 Three lists that each decide what exists is how a hidden destination stays reachable from one of
 them.
 
+## What talks to what
+
+Every endpoint the API exposes now has a caller, which was not true before — the console used six
+of about thirty-five:
+
+| Surface | Endpoints |
+|---|---|
+| Feed | `feed`, `feed/excluded`, `engagement/{saved,applied,opened,dismissed}`, `engagement/dismiss-reasons` |
+| Saved | `engagement/saved` |
+| Corpus | `opportunities`, `opportunities/{id}` |
+| Profile | `profile` (GET/PUT), `profile/resume`, `profile/resumes`, erasure |
+| Notifications | `notifications` (GET/PUT), `consent`, `history` |
+| Report a listing | `listings/flag-reasons`, `listings/{id}/flag` |
+| Operations | `slo`, `sources`, `sources/{id}/{health,status,requeue,purge-plan,purge}`, `flags`, `flags/{id}/resolve`, `merge-candidates`, `merge-candidates/{id}/resolve`, `opportunities/{id}/{sources,unmerge,requeue}` |
+
+Two closed sets — dismissal reasons and flag reasons — are **fetched, not hardcoded**. A dismissal
+reason is a training label, and the vocabulary belongs to whatever will learn from it; a client copy
+drifts the moment the set changes, and the symptom is a reason the server rejects or silently stores
+as something else.
+
 ## Structure
 
 ```
@@ -146,6 +166,32 @@ tag is invisible to both compilers — Go builds, `tsc` passes, the field arrive
 `internal/apicontract` covers that: a reflection test listing every json path this console reads,
 which fails if one is renamed or removed. It needs no database and runs on every `make test`. If
 you add a field to a card, add its path there too.
+
+## Testing
+
+```bash
+npm run build          # tsc -b, then vite build. A type error fails it.
+make web-e2e           # responsive + access control, in a real browser
+```
+
+The e2e suite exists for the two bug classes `tsc` cannot see: **a page that pans
+sideways**, and **a surface a role should not reach**. Both were found by hand first, and both
+would come back silently.
+
+`e2e/responsive.spec.ts` covers the public pages; `e2e/console.spec.ts` covers all nine `/app`
+routes with a seeded session, so the tables are tested **with data in them** — a responsive test
+against a skeleton screen proves nothing. Five viewports, 320px to 1440px.
+
+Two real bugs it caught on the first run, neither visible in review:
+
+- The `sr-only` accessibility table in `FitLedger` was 688px wide and panned the whole page at
+  320px. Tailwind's `sr-only` sets `width: 1px`, but a `<table>` ignores any width below its
+  min-content — so the clip never applied. `sr-only` now lives on a wrapping `div`.
+- The ⌘K palette's "Toggle theme" did nothing: it finds the button by `[data-theme-toggle]` and
+  no such attribute existed. Nothing else exercises that command.
+
+CI runs the public suite only. The console suite needs a live API and a seeded session, and a
+responsive test against a login redirect proves nothing.
 
 ## Typography and spacing
 

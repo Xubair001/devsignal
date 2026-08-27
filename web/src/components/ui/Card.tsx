@@ -43,7 +43,13 @@ export function Card({
   return (
     <Tag
       className={cn(
-        'rounded-[var(--radius-lg)] border border-line bg-surface shadow-card',
+        /* min-w-0 is load-bearing, not tidiness. A flex or grid item defaults to
+           min-width:auto, which refuses to shrink below its content's
+           min-content width — so a Card holding a min-w-[640px] table forced the
+           whole PAGE to 720px at a 320px viewport, panning sideways, despite the
+           table having a correct overflow-x-auto wrapper. Found by the e2e
+           overflow test, and only with real data in the table. */
+        'min-w-0 rounded-[var(--radius-lg)] border border-line bg-surface shadow-card',
         'transition-[transform,box-shadow,border-color] duration-[var(--dur-base)]',
         'ease-[var(--ease-out-quart)]',
         PAD[pad],
