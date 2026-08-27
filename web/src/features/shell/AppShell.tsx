@@ -8,9 +8,8 @@ import { cn } from '@/components/ui/cn';
 import { IconButton } from '@/components/ui/Button';
 import { ThemeToggle } from './ThemeToggle';
 import { CommandPalette } from './CommandPalette';
-import { NAV_GROUPS } from './nav';
+import { navFor } from './nav';
 import { useSession } from '@/features/auth/useSession';
-import { LoginPage } from '@/features/auth/LoginPage';
 
 /**
  * The app frame.
@@ -29,14 +28,17 @@ export function AppShell() {
   const [menu, setMenu] = useState<'who' | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { pathname } = useLocation();
-  const { session, loading, signedIn } = useSession();
+  const { session, signedIn, isAdmin } = useSession();
+  const groups = navFor(isAdmin);
 
   const flags = useQuery({
     queryKey: qk.flags('open'),
     queryFn: () => adminApi.flags('open'),
     retry: false,
     staleTime: 30_000,
-    enabled: signedIn,
+    // Admin-only endpoint. Firing it for a plain user guarantees a 404 per
+    // mount, which is noise in the log and a wasted round trip.
+    enabled: signedIn && isAdmin,
   });
   const openFlags = flags.data?.flags.length ?? 0;
 
@@ -73,22 +75,13 @@ export function AppShell() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [menu]);
 
-  if (loading) {
-    return (
-      <div className="grid min-h-dvh place-items-center">
-        <p className="text-[13px] text-ink-3">Checking your session…</p>
-      </div>
-    );
-  }
-  if (!signedIn) return <LoginPage />;
-
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[236px_1fr]">
       {/* ------------------------------------------------------------ sidebar */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface/60 lg:flex">
         <Brand />
         <nav className="flex-1 overflow-y-auto px-3 py-2 no-bar" aria-label="Main">
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.heading} className="mb-5">
               <p className="mb-1.5 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-ink-3">
                 {group.heading}
@@ -101,7 +94,7 @@ export function AppShell() {
                       end={item.end}
                       icon={item.icon}
                       label={item.label}
-                      badge={item.to === '/flags' && openFlags > 0 ? openFlags : undefined}
+                      badge={item.to === '/app/flags' && openFlags > 0 ? openFlags : undefined}
                     />
                   </li>
                 ))}
@@ -181,10 +174,24 @@ export function AppShell() {
                       <p className="mt-0.5 truncate font-mono text-[11.5px] text-ink-2">
                         {session?.user_id}
                       </p>
+                      {/* The role, shown. An operator holding admin should be able
+                          to see that they do — a surface appearing or not is a
+                          confusing way to learn your own permissions. */}
+                      <span
+                        className={cn(
+                          'mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10.5px]',
+                          'font-bold uppercase tracking-wider',
+                          session?.is_admin
+                            ? 'bg-brand-wash text-brand-ink'
+                            : 'bg-raised text-ink-3',
+                        )}
+                      >
+                        {session?.is_admin ? 'Operator' : 'Member'}
+                      </span>
                     </div>
                     <div className="my-1 h-px bg-line" />
-                    <MenuLink to="/profile" label="Profile" />
-                    <MenuLink to="/settings" label="Notifications" />
+                    <MenuLink to="/app/profile" label="Profile" />
+                    <MenuLink to="/app/settings" label="Notifications" />
                     <div className="my-1 h-px bg-line" />
                     <SignOut />
                   </div>
@@ -220,7 +227,7 @@ export function AppShell() {
           >
             <Brand />
             <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label="Main">
-              {NAV_GROUPS.map((group) => (
+              {groups.map((group) => (
                 <div key={group.heading} className="mb-5">
                   <p className="mb-1.5 px-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-ink-3">
                     {group.heading}
@@ -233,7 +240,7 @@ export function AppShell() {
                           end={item.end}
                           icon={item.icon}
                           label={item.label}
-                          badge={item.to === '/flags' && openFlags > 0 ? openFlags : undefined}
+                          badge={item.to === '/app/flags' && openFlags > 0 ? openFlags : undefined}
                         />
                       </li>
                     ))}
@@ -363,7 +370,7 @@ function SignOut() {
 }
 
 const LABELS: Record<string, string> = {
-  '': 'Overview',
+  overview: 'Overview',
   feed: 'Today',
   saved: 'Saved',
   browse: 'Corpus',
@@ -374,8 +381,9 @@ const LABELS: Record<string, string> = {
 };
 
 function Breadcrumbs({ pathname }: { pathname: string }) {
-  const parts = pathname.split('/').filter(Boolean);
-  const head = LABELS[parts[0] ?? ''] ?? parts[0] ?? 'Overview';
+  /* Drop the /app segment: it is a routing detail, not a place. */
+  const parts = pathname.split('/').filter(Boolean).slice(1);
+  const head = LABELS[parts[0] ?? ''] ?? parts[0] ?? 'Today';
   const isDetail = parts.length > 1;
 
   return (

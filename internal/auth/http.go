@@ -27,6 +27,15 @@ func FromContext(ctx context.Context) (*Identity, bool) {
 	return id, ok
 }
 
+// WithIdentity attaches an identity to a context.
+//
+// Exported for tests only: production code gets here through Authenticator,
+// which is the single place a token becomes an identity. A handler that builds
+// its own identity would be trusting its own input.
+func WithIdentity(ctx context.Context, id *Identity) context.Context {
+	return context.WithValue(ctx, identityKey, id)
+}
+
 type Handler struct {
 	svc *Service
 	log *slog.Logger

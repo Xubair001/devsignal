@@ -335,6 +335,10 @@ func buildRouter(
 			// Notification settings and the digest history. The caller's own data,
 			// so it reads identity from the context like everything else here.
 			priv.Mount("/notifications", digestH.Routes())
+			// The role travels to the client so the console can hide surfaces the
+			// caller cannot use. That is a USABILITY measure, not the security
+			// boundary: /internal/admin is still gated server-side and answers 404
+			// to a non-admin, because a hidden link is not an access control.
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {
@@ -342,8 +346,9 @@ func buildRouter(
 					return
 				}
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"user_id":%q,"tenant_id":%q}`,
-					id.UserID.String(), id.TenantID.String())
+				_, _ = fmt.Fprintf(w,
+					`{"user_id":%q,"tenant_id":%q,"role":%q,"is_admin":%t}`,
+					id.UserID.String(), id.TenantID.String(), id.Role, id.IsAdmin())
 			})
 		})
 	})

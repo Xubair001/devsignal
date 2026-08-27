@@ -362,7 +362,19 @@ export type DigestHistory = { sends: DigestSend[] };
 
 /* ------------------------------------------------------------------ auth --- */
 
-export type Session = { user_id: string; tenant_id: string };
+export type Session = {
+  user_id: string;
+  tenant_id: string;
+  role: 'user' | 'admin';
+  /**
+   * Whether the operations surface is reachable.
+   *
+   * Sent so the console can hide what the caller cannot use. It is NOT the
+   * security boundary: /internal/admin is gated server-side and answers 404 to a
+   * non-admin, because a hidden link is not an access control.
+   */
+  is_admin: boolean;
+};
 
 export type LoginResponse = {
   session_token: string;

@@ -34,7 +34,7 @@ export function PostingRow({ p, right }: { p: Posting; right?: React.ReactNode }
 
       <div className="min-w-0 flex-1">
         <Link
-          to={`/browse/${p.id}`}
+          to={`/app/browse/${p.id}`}
           className="text-[13.5px] font-semibold leading-snug decoration-line-strong underline-offset-2 hover:underline"
         >
           {p.title}

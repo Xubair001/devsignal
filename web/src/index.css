@@ -55,24 +55,31 @@
   --radius-pill: 999px;
 
   /* --- light palette -----------------------------------------------------
-     The neutrals carry a slight cool bias toward the indigo accent rather
-     than being pure grey: a mid-grey next to a saturated accent reads as
-     unconsidered. */
-  --color-ground: #f7f8fc;
-  --color-ground-2: #eef1f8;
+     The neutrals carry a slight cool bias toward the accent rather than being
+     pure grey: a mid-grey next to a saturated accent reads as unconsidered. */
+  --color-ground: #f6f9fb;
+  --color-ground-2: #eaf0f5;
   --color-surface: #ffffff;
-  --color-raised: #f2f4fa;
-  --color-hover: #f7f8fc;
-  --color-line: rgb(19 24 46 / 0.08);
-  --color-line-strong: rgb(19 24 46 / 0.15);
-  --color-ink: #0f172a;
-  --color-ink-2: #4a5468;
-  --color-ink-3: #8b95a9;
+  --color-raised: #f0f4f8;
+  --color-hover: #f5f9fc;
+  --color-line: rgb(13 30 44 / 0.08);
+  --color-line-strong: rgb(13 30 44 / 0.15);
+  --color-ink: #0c1b26;
+  --color-ink-2: #46586a;
+  --color-ink-3: #7d8fa0;
 
-  --color-brand: #5b5bf0;
-  --color-brand-ink: #4747d6;
-  --color-brand-wash: rgb(91 91 240 / 0.09);
-  --color-brand-edge: rgb(91 91 240 / 0.28);
+  /* Accent: a deep ocean blue.
+     Chosen against three constraints rather than for taste. It must not be
+     purple (replaced indigo). It must be unmistakable next to the semantic
+     colours — good is emerald, warn amber, bad red — so a teal or a green
+     accent would read as a status and this is pushed firmly blue-of-teal. And
+     it must hold 4.5:1 on both the white card and the near-black one, which is
+     why the light and dark values are not the same hue lightness.
+     One token: change these four lines and the whole interface follows. */
+  --color-brand: #0b6fa4;
+  --color-brand-ink: #075a86;
+  --color-brand-wash: rgb(11 111 164 / 0.085);
+  --color-brand-edge: rgb(11 111 164 / 0.26);
 
   --color-good: #06845b;
   --color-good-wash: rgb(6 132 91 / 0.1);
@@ -90,12 +97,12 @@
   --color-null-wash: rgb(107 118 136 / 0.08);
 
   --color-glass: rgb(255 255 255 / 0.7);
-  --color-glass-line: rgb(19 24 46 / 0.07);
+  --color-glass-line: rgb(13 30 44 / 0.07);
 
-  --shadow-flat: 0 1px 1px rgb(19 24 46 / 0.03);
-  --shadow-card: 0 1px 2px rgb(19 24 46 / 0.04), 0 2px 6px -1px rgb(19 24 46 / 0.05);
-  --shadow-raise: 0 2px 4px rgb(19 24 46 / 0.04), 0 10px 20px -6px rgb(19 24 46 / 0.09);
-  --shadow-float: 0 6px 12px rgb(19 24 46 / 0.05), 0 28px 56px -14px rgb(19 24 46 / 0.2);
+  --shadow-flat: 0 1px 1px rgb(13 30 44 / 0.03);
+  --shadow-card: 0 1px 2px rgb(13 30 44 / 0.04), 0 2px 6px -1px rgb(13 30 44 / 0.05);
+  --shadow-raise: 0 2px 4px rgb(13 30 44 / 0.04), 0 10px 20px -6px rgb(13 30 44 / 0.09);
+  --shadow-float: 0 6px 12px rgb(13 30 44 / 0.05), 0 28px 56px -14px rgb(13 30 44 / 0.2);
   --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.6);
 
   /* --- motion -------------------------------------------------------------
@@ -108,21 +115,21 @@
   --dur-slow: 320ms;
 
   /* --- dark values, declared once ---------------------------------------- */
-  --d-ground: #080b13;
-  --d-ground-2: #0c111c;
-  --d-surface: #121826;
-  --d-raised: #182031;
-  --d-hover: #1b2436;
+  --d-ground: #070c11;
+  --d-ground-2: #0b1219;
+  --d-surface: #101a22;
+  --d-raised: #16232d;
+  --d-hover: #1a2833;
   --d-line: rgb(255 255 255 / 0.08);
   --d-line-strong: rgb(255 255 255 / 0.16);
   --d-ink: #fafafa;
-  --d-ink-2: #9aa5ba;
-  --d-ink-3: #66718a;
+  --d-ink-2: #97a8b6;
+  --d-ink-3: #64798a;
 
-  --d-brand: #8b8bff;
-  --d-brand-ink: #adadff;
-  --d-brand-wash: rgb(139 139 255 / 0.14);
-  --d-brand-edge: rgb(139 139 255 / 0.34);
+  --d-brand: #4cb2e0;
+  --d-brand-ink: #7fcbeb;
+  --d-brand-wash: rgb(76 178 224 / 0.14);
+  --d-brand-edge: rgb(76 178 224 / 0.32);
 
   --d-good: #34d399;
   --d-good-wash: rgb(52 211 153 / 0.13);
@@ -133,7 +140,7 @@
   --d-null: #6b7688;
   --d-null-wash: rgb(107 118 136 / 0.14);
 
-  --d-glass: rgb(8 11 19 / 0.72);
+  --d-glass: rgb(7 12 17 / 0.72);
   --d-glass-line: rgb(255 255 255 / 0.07);
 
   --d-shadow-flat: 0 1px 1px rgb(0 0 0 / 0.3);

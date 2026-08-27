@@ -28,6 +28,9 @@ export function useSession() {
     session: q.data ?? null,
     loading: token() !== null && q.isLoading,
     signedIn: !!q.data,
+    /* Defaults to false while loading and for a signed-out caller, so a surface
+       gated on it is hidden by default rather than exposed by default. */
+    isAdmin: q.data?.is_admin === true,
     unauthorized: token() === null || unauthorized,
     refetch: q.refetch,
   };

@@ -1,7 +1,14 @@
 import type { ReactNode } from 'react';
 
-export type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean };
-export type NavGroup = { heading: string; items: NavItem[] };
+export type NavItem = {
+  to: string;
+  label: string;
+  icon: ReactNode;
+  end?: boolean;
+  /** Hidden from a non-admin. Usability, not security — the server gates it. */
+  adminOnly?: boolean;
+};
+export type NavGroup = { heading: string; items: NavItem[]; adminOnly?: boolean };
 
 const stroke = {
   fill: 'none' as const,
@@ -31,7 +38,7 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'For you',
     items: [
       {
-        to: '/feed',
+        to: '/app/feed',
         label: 'Today',
         icon: (
           <I>
@@ -41,7 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/saved',
+        to: '/app/saved',
         label: 'Saved',
         icon: (
           <I>
@@ -50,7 +57,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/browse',
+        to: '/app/browse',
         label: 'Corpus',
         icon: (
           <I>
@@ -60,7 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/profile',
+        to: '/app/profile',
         label: 'Profile',
         icon: (
           <I>
@@ -70,7 +77,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/settings',
+        to: '/app/settings',
         label: 'Notifications',
         icon: (
           <I>
@@ -83,11 +90,11 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     heading: 'Operations',
+    adminOnly: true,
     items: [
       {
-        to: '/',
+        to: '/app/overview',
         label: 'Overview',
-        end: true,
         icon: (
           <I>
             <rect x="3" y="3" width="7.5" height="7.5" rx="1.6" />
@@ -98,7 +105,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/sources',
+        to: '/app/sources',
         label: 'Sources',
         icon: (
           <I>
@@ -109,7 +116,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/merges',
+        to: '/app/merges',
         label: 'Merge review',
         icon: (
           <I>
@@ -120,7 +127,7 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        to: '/flags',
+        to: '/app/flags',
         label: 'Flags',
         icon: (
           <I>
@@ -133,4 +140,20 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 /** Flat list, for the command palette and the mobile drawer. */
-export const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
+export const NAV: NavItem[] = NAV_GROUPS.flatMap((g) =>
+  g.items.map((i) => ({ ...i, adminOnly: i.adminOnly ?? g.adminOnly })),
+);
+
+/**
+ * The groups this role may see.
+ *
+ * Filtering here rather than at each render site means the sidebar, the drawer
+ * and the command palette cannot disagree about what exists — which is exactly
+ * how a "hidden" link ends up reachable from one of the three.
+ */
+export function navFor(isAdmin: boolean): NavGroup[] {
+  return NAV_GROUPS.filter((g) => isAdmin || !g.adminOnly).map((g) => ({
+    ...g,
+    items: g.items.filter((i) => isAdmin || !(i.adminOnly ?? g.adminOnly)),
+  }));
+}

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/Toast';
-import { NAV } from './nav';
+import { navFor } from './nav';
+import { useSession } from '@/features/auth/useSession';
 
 type Command = { label: string; hint?: string; run: () => void };
 
@@ -14,14 +15,20 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { isAdmin } = useSession();
 
   const commands = useMemo<Command[]>(
     () => [
-      ...NAV.map((n) => ({
-        label: `Go to ${n.label}`,
-        hint: 'page',
-        run: () => nav(n.to),
-      })),
+      /* Filtered by role from the same source as the sidebar. Three lists that
+         each decide what exists is how a "hidden" destination stays reachable
+         from one of them. */
+      ...navFor(isAdmin)
+        .flatMap((g) => g.items)
+        .map((n) => ({
+          label: `Go to ${n.label}`,
+          hint: 'page',
+          run: () => nav(n.to),
+        })),
       {
         label: 'Refresh every panel',
         hint: 'data',
@@ -36,7 +43,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         run: () => document.querySelector<HTMLButtonElement>('[data-theme-toggle]')?.click(),
       },
     ],
-    [nav, qc, toast],
+    [nav, qc, toast, isAdmin],
   );
 
   const shown = useMemo(() => {

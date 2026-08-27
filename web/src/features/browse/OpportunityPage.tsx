@@ -35,7 +35,7 @@ export function OpportunityPage() {
   return (
     <div className="flex flex-col gap-4 rise">
       <Link
-        to="/browse"
+        to="/app/browse"
         className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-ink-3 transition-colors hover:text-ink"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"

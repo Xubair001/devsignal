@@ -135,7 +135,7 @@ function Side({ title, id, label }: { title: string; id: string; label: string }
         Posting {label}
       </p>
       <Link
-        to={`/browse/${id}`}
+        to={`/app/browse/${id}`}
         className="mt-1 block text-[13px] font-semibold leading-snug decoration-line-strong underline-offset-2 hover:underline"
       >
         {title}
