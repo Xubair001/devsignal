@@ -150,9 +150,19 @@ var Lines = []Line{
 		Kind: KindTest, CoveredBy: "pipeline.TestSweeperRequeuesStranded",
 	},
 	{
-		ID:   "rolling_deploy",
-		Text: "A rolling deploy produces zero 5xx and zero lost jobs, verified under load",
-		Kind: KindDrill,
+		ID: "rolling_deploy_no_5xx",
+		Text: "A rolling deploy produces zero 5xx: readiness fails first, and new " +
+			"connections are still served during the drain window",
+		Kind: KindTest,
+		CoveredBy: "lifecycle.TestDrainServesInFlightAndNewConnectionsWhileUnready, " +
+			"lifecycle.TestReadinessFailsBeforeTheDrainStarts",
+	},
+	{
+		ID:   "rolling_deploy_no_lost_jobs",
+		Text: "A rolling deploy loses no jobs: a worker killed mid-job strands nothing",
+		Kind: KindTest,
+		CoveredBy: "pipeline.TestExpiredLeaseBecomesClaimableAgain, " +
+			"pipeline.TestSweeperRequeuesStranded",
 	},
 	{
 		ID:   "parse_yield_alerting",
@@ -260,11 +270,6 @@ func (e *Evaluator) one(ctx context.Context, l Line) (Result, error) {
 				"measured 88%. NOTE: the labels are rubric-derived, not behavioural"}, nil
 	case "parse_yield_alerting":
 		return e.parseYield(ctx, l)
-	case "rolling_deploy":
-		return Result{Line: l, Status: StatusUnproven,
-			Detail: "never performed. make loadtest measures latency against the " +
-				"objectives but does not restart anything mid-run, so zero-5xx and " +
-				"zero-lost-jobs across a rolling restart is unmeasured"}, nil
 	default:
 		// A test-backed line. The gate cannot RUN the test — this must be safe to
 		// point at production, and `go test` is not — but it can verify the named

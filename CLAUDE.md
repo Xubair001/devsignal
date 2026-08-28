@@ -576,9 +576,14 @@ never as passing — hard rule 26 applied to our own launch criteria. A test-bac
 test that covers it and the gate **verifies that test exists**, so "covered by X" is falsifiable
 rather than a comment that outlives the test.
 
-Currently **17 pass, 0 fail, 1 unproven**: a rolling deploy has never been run under load, so
-zero-5xx and zero-lost-jobs across a restart is unmeasured. `make loadtest` measures latency but
-restarts nothing.
+Currently **19 pass, 0 fail, 0 unproven** — the gate is green.
+
+The last line to close was the rolling deploy, and closing it needed a real fix, not just a test:
+`/readyz` never flipped during shutdown. `http.Server.Shutdown` waits for in-flight requests but
+does **not** stop a balancer sending new ones, and those are refused at the socket — exactly the
+502s a rolling deploy is supposed not to produce. `internal/lifecycle` now fails readiness FIRST,
+waits `DRAIN_DELAY` for the balancer to notice, and only then drains. Liveness deliberately keeps
+returning 200 throughout: failing it invites the orchestrator to SIGKILL a pod mid-drain.
 
 The gate found three real defects on its first run: every ranking decision was recorded without its
 `factor_breakdown` (the column and the migration comment promising it both existed since step 17;

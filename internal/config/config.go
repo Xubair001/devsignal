@@ -32,6 +32,15 @@ type Config struct {
 	HTTPReadTimeout  time.Duration
 	HTTPWriteTimeout time.Duration
 	ShutdownTimeout  time.Duration
+	// DrainDelay is how long readiness fails BEFORE the HTTP drain starts.
+	//
+	// Endpoint removal is asynchronous in every orchestrator, so a balancer needs
+	// at least one failed probe interval to stop routing here. Zero means the
+	// drain begins while traffic is still arriving, which produces the 502s a
+	// rolling deploy is supposed not to produce. Five seconds covers a 2s probe
+	// interval with margin; set it to 0 in a test or a single-instance run where
+	// there is no balancer to notice.
+	DrainDelay time.Duration
 
 	// Extraction. The model is a config value so tiers can be compared without a
 	// code change; an empty key lets the SDK resolve credentials itself.
@@ -93,6 +102,7 @@ func Load() (*Config, error) {
 		HTTPReadTimeout:  dur("HTTP_READ_TIMEOUT", 15*time.Second),
 		HTTPWriteTimeout: dur("HTTP_WRITE_TIMEOUT", 30*time.Second),
 		ShutdownTimeout:  dur("SHUTDOWN_TIMEOUT", 30*time.Second),
+		DrainDelay:       dur("DRAIN_DELAY", 5*time.Second),
 		AnthropicAPIKey:  str("ANTHROPIC_API_KEY", ""),
 		OpenAIAPIKey:     str("OPENAI_API_KEY", ""),
 		// No default model here: the right default depends on which provider is

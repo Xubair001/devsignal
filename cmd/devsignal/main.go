@@ -35,6 +35,7 @@ import (
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
+	"github.com/Xubair001/devsignal/internal/lifecycle"
 	"github.com/Xubair001/devsignal/internal/loadtest"
 	"github.com/Xubair001/devsignal/internal/mail"
 	"github.com/Xubair001/devsignal/internal/matching"
@@ -244,7 +245,13 @@ func openDB(ctx context.Context, cfg *config.Config, log *slog.Logger) (*pgxpool
 // never touch.
 func buildRouter(
 	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool,
+	life *lifecycle.State,
 ) (http.Handler, error) {
+	if life == nil {
+		// A caller with no lifecycle (the load test, an in-process harness) is
+		// never draining.
+		life = lifecycle.New()
+	}
 	r := chi.NewRouter()
 	// No RealIP: it is vulnerable to spoofing (it trusts X-Forwarded-For /
 	// X-Real-IP whether or not your infrastructure sets them). When rate
@@ -262,8 +269,24 @@ func buildRouter(
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Readiness: can we serve traffic. This one does check the DB.
+	// Readiness: SHOULD we be sent traffic. Two reasons it can be no.
 	r.Get("/readyz", func(w http.ResponseWriter, req *http.Request) {
+		// Draining first, and before touching the database.
+		//
+		// http.Server.Shutdown waits for in-flight requests but does not stop the
+		// balancer sending NEW ones — those are refused at the socket, which is
+		// exactly the 502s a rolling deploy is supposed not to produce. Failing
+		// readiness before the drain starts is what makes the endpoint be removed
+		// while the server is still serving.
+		//
+		// Liveness deliberately keeps returning 200 through all of this: failing
+		// it would invite the orchestrator to SIGKILL a pod that is midway
+		// through finishing requests.
+		if life.Draining() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("draining"))
+			return
+		}
 		c, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 		defer cancel()
 		if err := pool.Ping(c); err != nil {
@@ -390,10 +413,19 @@ func buildRouter(
 }
 
 func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
-	handler, err := buildRouter(ctx, cfg, log, pool)
+	life := lifecycle.New()
+	handler, err := buildRouter(ctx, cfg, log, pool, life)
 	if err != nil {
 		return err
 	}
+
+	// A SECOND signal skips the drain delay. Someone holding Ctrl-C down is
+	// telling us to stop waiting, and making them wait through a five-second
+	// courtesy pause for a balancer that does not exist locally is the kind of
+	// small hostility that gets drains disabled.
+	hardStop, stopHard := signal.NotifyContext(
+		context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopHard()
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,
@@ -416,6 +448,23 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		return fmt.Errorf("http server: %w", err)
 	case <-ctx.Done():
 		log.Info("shutdown signal received, draining")
+	}
+
+	// Fail readiness FIRST, then pause, then drain.
+	//
+	// The pause is the whole point and it is not a sleep for its own sake:
+	// endpoint removal is asynchronous everywhere, so a balancer needs at least
+	// one failed probe interval to stop routing here. Shutting down immediately
+	// would drain the requests we already have while the balancer keeps sending
+	// more into a closing socket.
+	life.BeginDraining()
+	log.Info("readiness failing; waiting for the load balancer to notice",
+		"pause", cfg.DrainDelay)
+	select {
+	case <-time.After(cfg.DrainDelay):
+	case <-hardStop.Done():
+		// A second signal means someone wants this over with now.
+		log.Warn("second shutdown signal; skipping the drain delay")
 	}
 
 	// Ordered shutdown. In Kubernetes a preStop delay is still required — the
@@ -1202,7 +1251,9 @@ func loadTest(
 ) error {
 	// The REAL router, in process. A load test against a hand-built handler
 	// measures the hand-built handler.
-	handler, err := buildRouter(ctx, cfg, log, pool)
+	// nil lifecycle: the load test drives the router in-process and is never
+	// draining.
+	handler, err := buildRouter(ctx, cfg, log, pool, nil)
 	if err != nil {
 		return err
 	}
