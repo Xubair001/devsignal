@@ -564,7 +564,27 @@ in `_test`, provisioned and dropped per run by `make test-db`; `internal/dbtest`
 anything else. Do not hand it `DATABASE_URL` for a database you care about, and do not "fix"
 that refusal by relaxing the check.
 
-Before calling anything done, walk blueprint §38's production readiness gate. It is binary.
+Before calling anything done, run blueprint §38's production readiness gate — it is a command now,
+not a document:
+
+```bash
+make readiness            # 18 lines; exits non-zero unless every one is true
+```
+
+Three outcomes, not two. A line nobody measured reports **unproven** with what is missing attached,
+never as passing — hard rule 26 applied to our own launch criteria. A test-backed line names the
+test that covers it and the gate **verifies that test exists**, so "covered by X" is falsifiable
+rather than a comment that outlives the test.
+
+Currently **17 pass, 0 fail, 1 unproven**: a rolling deploy has never been run under load, so
+zero-5xx and zero-lost-jobs across a restart is unmeasured. `make loadtest` measures latency but
+restarts nothing.
+
+The gate found three real defects on its first run: every ranking decision was recorded without its
+`factor_breakdown` (the column and the migration comment promising it both existed since step 17;
+the writer never populated it), the console's purge client sent `confirm` where the API expects
+`confirm_delete_count` so the button 400'd every time, and the source review dates §38 asks for by
+name were null on every source.
 
 ## Branches
 

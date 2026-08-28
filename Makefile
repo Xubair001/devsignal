@@ -106,6 +106,9 @@ vet: ## go vet
 	go vet $(GO_PKGS)
 
 .PHONY: lint
+readiness: ## blueprint §38 — the production readiness gate. Binary.
+	./bin/devsignal --role=readiness
+
 web-build: ## typecheck and build the console
 	cd web && npm ci && npm run build
 

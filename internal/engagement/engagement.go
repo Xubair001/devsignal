@@ -207,9 +207,27 @@ func (s *Service) RecordShown(
 	}
 	rows := make([][]any, 0, len(matches))
 	for _, m := range matches {
+		// The factor breakdown AS SHOWN, not just the total.
+		//
+		// Blueprint §32 asks the decision record to answer "why was this ranked
+		// here for this user on this date", and a score without its arithmetic
+		// does not answer that — re-deriving it later under different weights is
+		// a different number about a different model. The column and the
+		// migration comment promising it were both here from step 17; the writer
+		// simply never populated it, so all 283 recorded decisions carried a
+		// total and no reasoning. Found by the §38 readiness gate.
+		breakdown, merr := json.Marshal(m.Fit.Factors)
+		if merr != nil {
+			// Degrade to a row without it rather than dropping the impression:
+			// the saturation signal is still worth having, and a feed must not
+			// fail because a log entry would not serialize.
+			s.log.Warn("encoding factor breakdown",
+				"opportunity_id", m.Opportunity.ID.String(), "err", merr)
+			breakdown = nil
+		}
 		rows = append(rows, []any{
 			userID, m.Opportunity.ID, EventShown,
-			int16(m.Fit.Score), int16(m.Fit.MaxPossible),
+			int16(m.Fit.Score), int16(m.Fit.MaxPossible), breakdown,
 			matching.WeightsVersion, embed.LocalVersion,
 			profileVersion, m.Opportunity.Version,
 		})
@@ -217,7 +235,7 @@ func (s *Service) RecordShown(
 	n, err := s.pool.CopyFrom(ctx,
 		pgx.Identifier{"engagement_event"},
 		[]string{"user_id", "opportunity_id", "event_type",
-			"fit_score_at_event", "max_possible_at_event",
+			"fit_score_at_event", "max_possible_at_event", "factor_breakdown",
 			"weights_version", "embedding_version",
 			"profile_version", "opportunity_version"},
 		pgx.CopyFromRows(rows))

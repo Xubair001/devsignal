@@ -36,8 +36,15 @@ export const adminApi = {
    * will_be_deleted — the server checks it, so a stale plan cannot authorise a
    * larger delete than the operator saw.
    */
-  purgeSource: (id: string, confirm: number, note: string) =>
-    http.post<unknown>(`/internal/admin/sources/${id}/purge`, { confirm, note }),
+  purgeSource: (id: string, confirmDeleteCount: number, note: string, dryRun = false) =>
+    http.post<unknown>(`/internal/admin/sources/${id}/purge`, {
+      // confirm_delete_count, not "confirm". The field name was wrong here and
+      // the endpoint 400'd on every call — found by running the §38 purge drill
+      // rather than by reading either side.
+      confirm_delete_count: confirmDeleteCount,
+      dry_run: dryRun,
+      note,
+    }),
 
   mergeCandidates: () =>
     http.get<MergeCandidatesResponse>('/internal/admin/merge-candidates'),

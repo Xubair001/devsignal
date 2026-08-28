@@ -64,7 +64,7 @@ func main() {
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
 			"spend | retrieve | match | eval | reindex-profiles | "+
 			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest | "+
-			"digest-optin | skills | resume-skills | gaps")
+			"digest-optin | skills | resume-skills | gaps | readiness")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -202,6 +202,8 @@ func run(role string, f flags) error {
 		return resumeSkillsRun(ctx, cfg, log, pool, f)
 	case "gaps":
 		return gapsReport(ctx, cfg, log, pool, f)
+	case "readiness":
+		return readinessRun(ctx, cfg, log, pool, f)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
 	}

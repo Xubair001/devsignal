@@ -45,6 +45,24 @@ func testService(t *testing.T, pool *pgxpool.Pool) *Service {
 	return NewService(pool, b, quiet())
 }
 
+// testServiceWithLogger is testService with the log captured, for the PII guard.
+func testServiceWithLogger(t *testing.T, pool *pgxpool.Pool, log *slog.Logger) *Service {
+	t.Helper()
+	ep := os.Getenv("S3_ENDPOINT")
+	if ep == "" {
+		t.Skip("S3_ENDPOINT not set")
+	}
+	b, err := blob.New(context.Background(), blob.Config{
+		Endpoint: ep, Bucket: "devsignal-pii-" + uuid.NewString()[:8],
+		AccessKey: os.Getenv("S3_ACCESS_KEY"), SecretKey: os.Getenv("S3_SECRET_KEY"),
+		PathStyle: true,
+	})
+	if err != nil {
+		t.Fatalf("blob: %v", err)
+	}
+	return NewService(pool, b, log)
+}
+
 // newUser creates a real user through the auth service, so the fixture exercises
 // the same rows a live signup produces.
 func newUser(t *testing.T, pool *pgxpool.Pool) (pgtype.UUID, pgtype.UUID) {
