@@ -260,6 +260,57 @@ func (q *Queries) GetNotificationSetting(ctx context.Context, userID pgtype.UUID
 	return i, err
 }
 
+const listDigestSends = `-- name: ListDigestSends :many
+SELECT local_date, outcome, reason, item_count, sent_at, attempts
+  FROM digest_send
+ WHERE user_id = $1
+ ORDER BY local_date DESC
+ LIMIT $2::int
+`
+
+type ListDigestSendsParams struct {
+	UserID  pgtype.UUID
+	MaxRows int32
+}
+
+type ListDigestSendsRow struct {
+	LocalDate pgtype.Date
+	Outcome   string
+	Reason    *string
+	ItemCount int32
+	SentAt    pgtype.Timestamptz
+	Attempts  int32
+}
+
+// The user's own digest history, newest first. Answers "why did I not get a
+// digest yesterday" with the recorded reason rather than a shrug.
+func (q *Queries) ListDigestSends(ctx context.Context, arg ListDigestSendsParams) ([]ListDigestSendsRow, error) {
+	rows, err := q.db.Query(ctx, listDigestSends, arg.UserID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDigestSendsRow
+	for rows.Next() {
+		var i ListDigestSendsRow
+		if err := rows.Scan(
+			&i.LocalDate,
+			&i.Outcome,
+			&i.Reason,
+			&i.ItemCount,
+			&i.SentAt,
+			&i.Attempts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markDigestFailed = `-- name: MarkDigestFailed :execrows
 UPDATE digest_send
    SET outcome = 'failed', reason = $1

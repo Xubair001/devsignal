@@ -26,7 +26,7 @@ import (
 func digestRun(
 	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, f flags,
 ) error {
-	sender, err := digest.NewSender(cfg.DigestSender, cfg.DigestLogDir, nil)
+	sender, err := digest.NewSender(cfg.MailSender, cfg.MailLogDir, nil)
 	if err != nil {
 		return err
 	}
@@ -38,8 +38,8 @@ func digestRun(
 	}
 
 	fmt.Printf("digest run  sender=%s\n", sender.Name())
-	if cfg.DigestSender == "log" {
-		fmt.Printf("            writing to %s (nothing is delivered)\n", cfg.DigestLogDir)
+	if cfg.MailSender == digest.SenderLog {
+		fmt.Printf("            writing to %s (nothing is delivered)\n", cfg.MailLogDir)
 	}
 	fmt.Println()
 

@@ -10,6 +10,10 @@ export function ThemeToggle() {
     <IconButton
       label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
       onClick={toggle}
+      /* The command palette's "Toggle theme" finds the button by this attribute.
+         It was missing, so that command silently did nothing — caught by the
+         responsive e2e test, which is the only thing that exercises it. */
+      data-theme-toggle=""
       className="overflow-hidden"
     >
       <svg

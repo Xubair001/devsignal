@@ -10,7 +10,7 @@ package enrich
 // else may.
 const (
 	// PromptVersion changes when the instruction text changes.
-	PromptVersion = "p-2026-08-24"
+	PromptVersion = "p-2026-08-27"
 	// SchemaVersion changes when the output shape changes.
 	SchemaVersion = "s-2026-08-24"
 )
@@ -81,60 +81,40 @@ type Result struct {
 //
 //nolint:goconst // JSON Schema keywords read better inline
 func JSONSchema() map[string]any {
-	strEnum := func(vals ...string) map[string]any {
-		return map[string]any{"type": "string", "enum": vals}
-	}
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"required": []string{
+	return object(
+		[]string{
 			FieldSeniority, FieldRoleFamily, FieldEmploymentType, FieldRemotePolicy,
-			"years_experience_min", "skills", "responsibilities", "requirements",
+			kFieldYears, kFieldSkill, "responsibilities", "requirements",
 			"salary_stated", "salary_text",
 		},
-		"properties": map[string]any{
+		map[string]any{
 			// "unknown" is a first-class answer everywhere. Forcing a choice is
 			// what produces confident nonsense.
-			FieldSeniority: strEnum("intern", "junior", "mid", "senior", "staff", "principal", UnknownValue),
-			FieldRoleFamily: strEnum("backend", "frontend", "fullstack", "mobile", "data", "ml",
-				"platform", "security", "qa", "design", "product", "sales", "support",
-				"marketing", "people", "finance", "engineering", UnknownValue),
-			FieldEmploymentType: strEnum("full_time", "part_time", "contract", "internship", UnknownValue),
-			FieldRemotePolicy:   strEnum("remote", "hybrid", "onsite", UnknownValue),
-			"years_experience_min": map[string]any{
-				"type":        []string{"integer", "null"},
-				"minimum":     0,
-				"maximum":     50,
-				"description": "null unless the posting states a minimum",
-			},
-			"skills": map[string]any{
-				"type":     "array",
-				"maxItems": 40,
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"required":             []string{"name", "level"},
-					"properties": map[string]any{
-						"name":  map[string]any{"type": "string", "maxLength": 60},
-						"level": strEnum(LevelRequired, LevelPreferred, LevelMentioned),
-					},
+			FieldSeniority: enumOf("intern", "junior", "mid", "senior", "staff",
+				"principal", UnknownValue),
+			FieldRoleFamily: enumOf("backend", "frontend", "fullstack", "mobile",
+				"data", "ml", "platform", "security", "qa", "design", "product",
+				"sales", "support", "marketing", "people", "finance", "engineering",
+				UnknownValue),
+			FieldEmploymentType: enumOf("full_time", "part_time", "contract",
+				"internship", UnknownValue),
+			FieldRemotePolicy: enumOf("remote", "hybrid", "onsite", UnknownValue),
+			kFieldYears: nullableInt(0, 50,
+				"null unless the posting states a minimum"),
+			kFieldSkill: array(40, object(
+				[]string{kFieldName, "level"},
+				map[string]any{
+					kFieldName: str(60),
+					"level":    enumOf(LevelRequired, LevelPreferred, LevelMentioned),
 				},
-			},
-			"responsibilities": map[string]any{
-				"type": "array", "maxItems": 15,
-				"items": map[string]any{"type": "string", "maxLength": 300},
-			},
-			"requirements": map[string]any{
-				"type": "array", "maxItems": 15,
-				"items": map[string]any{"type": "string", "maxLength": 300},
-			},
-			"salary_stated": map[string]any{"type": "boolean"},
-			"salary_text": map[string]any{
-				"type": "string", "maxLength": 200,
-				"description": "verbatim from the posting; empty when salary_stated is false",
-			},
+			)),
+			"responsibilities": array(15, str(300)),
+			"requirements":     array(15, str(300)),
+			"salary_stated":    boolean(),
+			"salary_text": strWithDesc(200,
+				"verbatim from the posting; empty when salary_stated is false"),
 		},
-	}
+	)
 }
 
 // Instructions is the stable prefix.
@@ -154,6 +134,20 @@ Rules:
   empty.
 - skills: name the technology or competency as the posting writes it. Do not
   translate to a canonical form and do not add skills that are merely implied.
+- A skill is something a person can be said to HAVE: a named technology, tool,
+  platform, language, protocol, standard, certification, or a named methodology
+  or domain of expertise. Include it as the posting writes it.
+  Do NOT list, as skills:
+    * generic activity or department nouns - "sales", "marketing", "design",
+      "engineering", "product", "automation", "documentation" on its own,
+      "demos", "logs", "meetings", "collaboration", "communication"
+    * responsibilities or artifacts - "hands-on labs", "partner portals",
+      "customer meetings", "quarterly reviews". Those belong in
+      responsibilities, not skills.
+    * the hiring company's own name or products, unless the posting requires
+      prior experience with them
+  A phrase you would not write on a CV under "Skills" is not a skill here. When
+  in doubt, leave it out: an omitted skill costs less than an invented one.
 - level is "required" only if the posting requires it, "preferred" for
   nice-to-haves, "mentioned" for anything named without either framing.
 - responsibilities and requirements: short verbatim-ish phrases, not prose.

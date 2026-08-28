@@ -35,6 +35,19 @@ quality. Behavioural labels replace the rubric at step 17.
 behavioural evaluation set that will replace the rubric labels, and the ranking decision record
 blueprint §32 requires. Nothing there updates or deletes — un-saving appends.
 
+The web front end is public at `/` (landing), `/login` and `/register`, with the console under
+`/app`. Separated rather than switching on the session at the root, so a deep link means one thing
+whoever follows it.
+
+**RBAC is a role on the identity, not a lookup.** `Authenticate` already loads the user row, so
+`auth.Identity` carries `Role` and revoking admin takes effect on the very next request.
+`RequireAdmin` reads the context and answers **404, not 403** — a 403 confirms the surface exists.
+`/api/v1/me` returns `role` and `is_admin` so the console can hide what the caller cannot use; that
+is usability, and the server gate is the boundary. `navFor(isAdmin)` filters the sidebar, the mobile
+drawer and the ⌘K palette from one source, because three lists that each decide what exists is how a
+hidden destination stays reachable from one of them. Verified with a real member account: `role:
+"user"`, 404 on all four admin endpoints, own surfaces 200.
+
 `/internal/admin` is the operations surface: source health with a quarantine toggle, full
 provenance with a working un-merge, the merge-candidate and listing-flag review queues, re-run
 controls, and a source purge that counts before it deletes. Admin is a role on `app_user`,
@@ -63,6 +76,22 @@ posting attached, so a card had no company, salary, apply link or liveness — t
 claim. See hard rule 27. The feed DTO now embeds `opportunity.Summary`, shared with the browse list
 so the two cannot drift.
 
+**Email verification is built and is the transactional half of `internal/mail`.** Transactional
+mail and the digest share a **transport** and never a consent gate — a user who withdraws digest
+consent still needs to verify an address and reset a password, so the consent check lives in
+`internal/digest` and deliberately not in the transport. `MAIL_SENDER=log` writes the message,
+link included, to `MAIL_LOG_DIR`, which is what makes signup completable with no provider.
+
+A verification link works **exactly once**: `ConsumeUserToken` claims it with
+`consumed_at IS NULL` in the WHERE clause, so two concurrent requests cannot both win and a
+replayed link finds nothing. Expiry is checked in SQL, not Go, so a clock difference between
+process and database cannot widen the window. Only the hash is stored. A resend supersedes the
+outstanding link rather than adding a second one. Expired, spent and never-issued all report
+**identically** — distinguishing them tells a caller whether an address is registered. A send
+failure never fails the signup: the account exists either way and a resend is one click.
+`/api/v1/me` returns `email_verified`, because the digest refuses to mail an unverified address
+and without that the console would be a silent dead end.
+
 `--role=digest` is step 18. Everything blueprint §4.3 requires is built — a structural daily cap,
 a weekly cap, quiet hours in the user's own timezone, a minimum **band** to interrupt on, and the
 explicit empty case — with the transport behind a `Sender` interface. `DIGEST_SENDER=log` renders
@@ -74,6 +103,26 @@ silently dropping mail. `--role=digest-optin` records evidenced consent.
 Against the real corpus the digest correctly sends **nothing**: 188 roles are eligible and none
 reach "Strong fit", because coverage sits under 60% without extraction. That is the feature working
 — see hard rule 28.
+
+**Question four is partly answered.** `--role=gaps --user=<id>` and `/app/gaps` report which skills
+a user's ELIGIBLE roles require that they have not listed, ranked by how many roles ask. Counts of
+postings only — there is no competitiveness figure, because we have no applicant counts and one
+invented number would discredit the honest ones beside it. A gap is deliberately **not** a scoring
+factor: the required-skills factor already scores what a person matches, and counting it again would
+double-count.
+
+Two things it has to get right about `eligibility_result`, both of which it got wrong first: the
+table is keyed per (profile_version, opportunity_version) so counting rows counted 502 "roles"
+against a 265-posting corpus; and a result computed against an older profile describes a gate the
+user no longer has. Every count is over DISTINCT opportunities at the CURRENT profile version.
+
+The two empty states are named by the server (`stale` vs `insufficient_extraction`) because they look
+identical and have opposite fixes — one needs the feed re-run, the other needs extraction. Reporting
+the wrong one is worse advice than none. The 60% coverage bar is the same constant the fit model uses,
+asserted by a test so the two cannot drift.
+
+What it does NOT answer is the trend: demand over time needs history that cannot be backfilled, and
+`skill_demand_daily` has one day.
 
 Next: step 22 (calibration) needs outcome data the engagement log is now collecting. Step 26
 (market intelligence) is blocked on a demand-series writer that **does not exist** — see
@@ -100,10 +149,55 @@ assumed:
 name and hard rule 8 makes that string the determinism guarantee. `--role=spend` reports cost per
 model id per lane.
 
-**The 45 skill points still do not score, and extraction was only half the blocker.** `profile_skill`
-has an upsert and a read but **no writer anywhere in the product** — resume ingestion extracts text,
-not skills. Posting skills now exist; the profile side is empty, and `required_skills` needs both.
-Extracting profile skills from resume text is the missing piece, and it is now possible. Scaling past the two boards currently
+**The 45 skill points now score.** Extraction was only half the blocker; the other two halves were
+an ontology and a way to write profile skills, and both are built:
+
+- `internal/skill` normalizes the model's words onto a canonical vocabulary. Without it "Go",
+  "Golang" and "Go (Golang)" were three rows and could never match a profile — measured: 10
+  postings produced 91 distinct skills with almost no overlap. `Normalize` is where the difficulty
+  is, because `+`, `#` and `.` carry meaning ("C++" is not "C", ".NET" is not "net") while every
+  other punctuation mark does not. `Load` validates the hand-edited file and refuses a duplicate
+  slug, an alias bound to two skills, or an edge to a slug that does not exist — it caught a real
+  conflict on first run.
+- `PUT /api/v1/profile` accepts skills, resolved through the **same** ontology. The profile
+  deliberately **cannot mint** new skills: a typo would become a vocabulary entry that then matches
+  no posting, so unrecognised names come back in `unresolved_skills` and are shown struck through.
+  Extraction is the asymmetric case — an unrecognised phrase there is evidence from a posting and
+  is kept.
+
+**Resume skills extract too, and `--role=resume-skills` is where the privacy rule lives.** The
+resume text is REDACTED before it leaves the process: the leading header block goes (located by the
+first section heading, falling back to the opening 200 characters), then every email address, URL,
+phone-shaped number and 7+ digit run. What was sent is recorded on the `resume` row —
+`skills_field_set`, `skills_redaction_version`, and counts, never values.
+
+The record lives on the resume row rather than in the shared `extraction` table on purpose.
+`extraction` is keyed on a content hash and has no `user_id`, so a resume extraction cached there
+would be user-derived data erasure could not scope a delete to. On the resume row it cascades with a
+store already in the inventory, so this added no new erasure location.
+
+Two things the redactor got wrong first, both found by running it rather than reading it:
+`profile.cleanText` collapses every newline to a space before the text is stored, so an earlier
+line-counting header drop was a **complete no-op in production** while cheerfully recording "6
+header lines dropped" — the candidate's name was reaching the model. And the URL pattern required a
+scheme, so `linkedin.com/in/firstname-lastname` in the body would have leaked. Both have regression
+tests over the flattened one-line form that production actually stores.
+
+Seniority and years from a resume are **recorded, never written onto the profile**. Those are the
+user's own stated preferences, and overwriting what a person typed with what a model read off their
+document is the same category error as showing an imputed salary as the employer's.
+
+Verified end to end: "Golang" → Go, "K8s" → Kubernetes, "Postgres" → PostgreSQL, "CI/CD" → cicd,
+and `--role=match` now reports `+12 of 35 from required skills (1 of 3 required skills)` with
+coverage at 90 of 100 points instead of 45. Bands read "Stretch" rather than "Not enough
+information".
+
+`--role=skills` seeds the vocabulary, `--unresolved` ranks the phrases it does not know by how many
+postings use them (the evidence-driven growth path — a phrase on forty postings is worth adding, one
+on a single posting is noise), and `--demand` snapshots `skill_demand_daily`, which had **no writer
+at all** before this. It is a recomputed snapshot rather than an incrementing counter: a counter
+would double-count every re-extraction and drift with nothing to audit against, and this is the one
+series in the system that cannot be rebuilt. Scaling past the two boards currently
 registered is blocked on the Tier-A source list, not on code — `add-sources` takes a file.
 
 Erasure is real and `make check-erasure` proves it. The one part still open is BACKUPS: either
@@ -155,7 +249,7 @@ Planned structure per blueprint §37.1. One binary; the role is selected by flag
 | `internal/pipeline/` | Work queue, state machine, sweeper, leases. The spine every worker plugs into |
 | `internal/opportunity/` | Canonical model, provenance, normalization, dedup, liveness |
 | `internal/company/` | Entity resolution on registrable domain, alias table |
-| `internal/skill/` | Ontology, aliases, edges, demand time-series writes. **Planned, not built** — the tables exist from migration 000004 and have no writer |
+| `internal/skill/` | Ontology (264 canonical skills, 623 normalized aliases, 81 edges), alias resolution, the demand time-series writer |
 | `internal/enrich/` | Extraction, embeddings, the content-hash cache, hot/cold lanes |
 | `internal/matching/` | Eligibility gate, retrieval, fit scoring, explanation |
 | `internal/engagement/` | Feed, saves, applications, dismissals |
@@ -317,7 +411,21 @@ blueprint's audit found.
     "verified open". Because the client's DTOs are hand-written, neither compiler noticed.
     `internal/apicontract` is the guard: a reflection test over every json path the console reads,
     which fails on a rename. Fetch the postings for the page, not for the candidate set —
-    loading 188 rows to render 7 cost 40 ms of the cold p95.
+    loading 188 rows to render 7 cost 40 ms of the cold p95. The same applies to the saved list,
+    which was ids and timestamps only — and a save is revisited days later, which is exactly when
+    liveness matters most.
+
+29. **A posting body is third-party HTML and is sanitized at the serve boundary.**
+    `opportunity.description_text` holds the board's bytes verbatim — every row in the corpus
+    starts with a `<div>` — and it was served as `description_html` with no filtering at all. A
+    client rendering that is stored XSS: a script in an employer's own posting would run with an
+    operator's session. `opportunity.SanitizeDescription` runs an allow-list (bluemonday) over it,
+    and the tests cover ten vectors a tag blocklist misses — `img onerror`, `javascript:` and
+    `data:` URLs, inline handlers, `<style>`, `<form>`, `<svg><animate onbegin>`, `<object>`.
+    Serve-time and not ingest-time on purpose: sanitizing on the way in would change the content
+    hash, invalidate every cached extraction, and destroy the answer to "what did the board
+    actually publish". `class`, `id` and `style` are stripped along with the rest, so third-party
+    markup cannot reshape the page around itself.
 
 28. **The bar for interrupting someone is a BAND, and "Not enough information" clears none of
     them.** The digest's minimum is `strong` or `worth_a_look`, never a numeric threshold: hard
@@ -456,7 +564,32 @@ in `_test`, provisioned and dropped per run by `make test-db`; `internal/dbtest`
 anything else. Do not hand it `DATABASE_URL` for a database you care about, and do not "fix"
 that refusal by relaxing the check.
 
-Before calling anything done, walk blueprint §38's production readiness gate. It is binary.
+Before calling anything done, run blueprint §38's production readiness gate — it is a command now,
+not a document:
+
+```bash
+make readiness            # 18 lines; exits non-zero unless every one is true
+```
+
+Three outcomes, not two. A line nobody measured reports **unproven** with what is missing attached,
+never as passing — hard rule 26 applied to our own launch criteria. A test-backed line names the
+test that covers it and the gate **verifies that test exists**, so "covered by X" is falsifiable
+rather than a comment that outlives the test.
+
+Currently **19 pass, 0 fail, 0 unproven** — the gate is green.
+
+The last line to close was the rolling deploy, and closing it needed a real fix, not just a test:
+`/readyz` never flipped during shutdown. `http.Server.Shutdown` waits for in-flight requests but
+does **not** stop a balancer sending new ones, and those are refused at the socket — exactly the
+502s a rolling deploy is supposed not to produce. `internal/lifecycle` now fails readiness FIRST,
+waits `DRAIN_DELAY` for the balancer to notice, and only then drains. Liveness deliberately keeps
+returning 200 throughout: failing it invites the orchestrator to SIGKILL a pod mid-drain.
+
+The gate found three real defects on its first run: every ranking decision was recorded without its
+`factor_breakdown` (the column and the migration comment promising it both existed since step 17;
+the writer never populated it), the console's purge client sent `confirm` where the API expects
+`confirm_delete_count` so the button 400'd every time, and the source review dates §38 asks for by
+name were null on every source.
 
 ## Branches
 

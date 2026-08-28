@@ -177,6 +177,8 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/", h.feed)
 	r.Get("/excluded", h.excluded)
 	r.Get("/{id}/explanation", h.explanation)
+	// "What am I missing" — the pair to /excluded's "why am I not seeing X".
+	r.Get("/gaps", h.gaps)
 	return r
 }
 
@@ -469,9 +471,28 @@ func (h *Handler) listSaved(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "could not list saved postings")
 		return
 	}
+	// The posting, for the same reason the feed needs it (hard rule 27): a list of
+	// ids is not a list a person can read. This was ids and timestamps only, so a
+	// saved-items screen had no title, no company, no apply link and no way to
+	// say whether the role is still open — which is the one thing a saved list is
+	// for, because a save is a decision revisited days later.
+	ids := make([]pgtype.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.OpportunityID)
+	}
+	postings, perr := h.opps.SummariesByID(r.Context(), ids)
+	if perr != nil {
+		h.log.Error("loading saved postings", "user_id", id.UserID.String(), "err", perr)
+		writeErr(w, http.StatusInternalServerError, "could not list saved postings")
+		return
+	}
+
 	type savedItem struct {
 		OpportunityID string    `json:"opportunity_id"`
 		SavedAt       time.Time `json:"saved_at"`
+		// Posting is a value, not a pointer: an entry we cannot describe is
+		// dropped rather than sent half-populated.
+		Posting opportunity.Summary `json:"posting"`
 	}
 	out := struct {
 		Items []savedItem `json:"items"`
@@ -479,13 +500,29 @@ func (h *Handler) listSaved(w http.ResponseWriter, r *http.Request) {
 		// inserted between pages, which for a save list means silently skipping
 		// something the user saved.
 		NextBefore *time.Time `json:"next_before"`
+		// Closed counts saves whose posting is gone — closed, merged away, or
+		// purged with its source. Reported rather than hidden: a shrinking saved
+		// list with no explanation looks like data loss.
+		Closed int `json:"closed_since_saved"`
 	}{Items: make([]savedItem, 0, len(rows))}
 
 	for _, row := range rows {
-		out.Items = append(out.Items, savedItem{row.OpportunityID.String(), row.SavedAt.Time})
+		posting, ok := postings[row.OpportunityID.String()]
+		if !ok {
+			out.Closed++
+			continue
+		}
+		out.Items = append(out.Items, savedItem{
+			OpportunityID: row.OpportunityID.String(),
+			SavedAt:       row.SavedAt.Time,
+			Posting:       posting,
+		})
 	}
-	if len(out.Items) > 0 {
-		out.NextBefore = &out.Items[len(out.Items)-1].SavedAt
+	// The cursor comes from the last row READ, not the last row shown: paging on
+	// a filtered timestamp would re-fetch the dropped entries forever.
+	if len(rows) > 0 {
+		last := rows[len(rows)-1].SavedAt.Time
+		out.NextBefore = &last
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -509,6 +546,77 @@ func (h *Handler) dismissReasons(w http.ResponseWriter, _ *http.Request) {
 	}{}
 	for _, v := range DismissReasons {
 		out.Reasons = append(out.Reasons, reason{v, labels[v]})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// gapView is one skill the caller's eligible roles ask for and they lack.
+// GapView is one skill the caller's eligible roles ask for and they lack.
+type GapView struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	RequiredBy  int64  `json:"required_by"`
+	PreferredBy int64  `json:"preferred_by"`
+}
+
+// StrengthView is a skill they have that those roles ask for.
+type StrengthView struct {
+	Name       string `json:"name"`
+	RequiredBy int64  `json:"required_by"`
+}
+
+// gapsResponse answers question four of the product's four.
+//
+// Every number here is a COUNT OF POSTINGS. There is deliberately no
+// competitiveness estimate and no probability: we have no applicant counts, and
+// one invented figure would discredit the honest ones beside it (blueprint §3).
+// The client renders these as counts and must not derive a percentage from them.
+type GapsResponse struct {
+	// State is "ready", "stale" or "insufficient_extraction". The two empty
+	// cases look identical and have opposite fixes, so they are named rather
+	// than left for the client to guess from a zero.
+	State     string         `json:"state"`
+	Gaps      []GapView      `json:"gaps"`
+	Strengths []StrengthView `json:"strengths"`
+	// Eligible and WithSkills are the denominator. Without it the counts above
+	// are unreadable: a posting whose skills were never extracted contributes
+	// nothing, so an unstated total silently understates every gap.
+	Eligible   int64 `json:"eligible"`
+	WithSkills int64 `json:"with_skills"`
+	// Excluded counts phrases dropped for not being in the ontology. A large
+	// number means the vocabulary is behind, not that the caller has few gaps.
+	Excluded int `json:"excluded_unknown_phrases"`
+}
+
+func (h *Handler) gaps(w http.ResponseWriter, r *http.Request) {
+	id, ok := identity(w, r)
+	if !ok {
+		return
+	}
+	rep, err := h.matcher.SkillGaps(r.Context(), id.UserID)
+	if err != nil {
+		h.log.Error("computing skill gaps", "user_id", id.UserID.String(), "err", err)
+		writeErr(w, http.StatusInternalServerError, "could not compute your skill gaps")
+		return
+	}
+
+	out := GapsResponse{
+		State:      string(rep.State()),
+		Gaps:       make([]GapView, 0, len(rep.Gaps)),
+		Strengths:  make([]StrengthView, 0, len(rep.Strengths)),
+		Eligible:   rep.Eligible,
+		WithSkills: rep.WithSkills,
+		Excluded:   rep.Excluded,
+	}
+	for _, g := range rep.Gaps {
+		out.Gaps = append(out.Gaps, GapView{
+			Slug: g.Slug, Name: g.DisplayName,
+			RequiredBy: g.RequiredBy, PreferredBy: g.PreferredBy,
+		})
+	}
+	for _, s := range rep.Strengths {
+		out.Strengths = append(out.Strengths,
+			StrengthView{Name: s.DisplayName, RequiredBy: s.RequiredBy})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

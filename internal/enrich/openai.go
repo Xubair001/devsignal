@@ -192,6 +192,11 @@ func supportsReasoningEffort(model string) bool {
 
 // Extract returns the model's raw JSON for one posting.
 func (p *OpenAIProvider) Extract(ctx context.Context, text string) (Raw, error) {
+	return p.ExtractWith(ctx, PostingTask(), text)
+}
+
+// ExtractWith runs an arbitrary task.
+func (p *OpenAIProvider) ExtractWith(ctx context.Context, task Task, text string) (Raw, error) {
 	text = strings.TrimSpace(text)
 	if len(text) < MinTextToExtract {
 		return Raw{}, ErrEmptyInput
@@ -209,14 +214,14 @@ func (p *OpenAIProvider) Extract(ctx context.Context, text string) (Raw, error) 
 			// content-hash cache in this package, not the vendor's, is what makes
 			// re-extraction free. That is hard rule 8, and it is provider-neutral
 			// by design.
-			{Role: "system", Content: Instructions},
+			{Role: "system", Content: task.Instructions},
 			{Role: "user", Content: text},
 		},
-		MaxCompletionTokens: p.maxOut,
+		MaxCompletionTokens: maxOut(task, p.maxOut),
 		ResponseFormat: openAIResponseFormat{
 			Type: "json_schema",
 			JSONSchema: openAIJSONSchema{
-				Name: "posting_extraction", Strict: true, Schema: JSONSchema(),
+				Name: task.Name, Strict: true, Schema: task.Schema(),
 			},
 		},
 	}
@@ -278,7 +283,7 @@ func (p *OpenAIProvider) Extract(ctx context.Context, text string) (Raw, error) 
 		// token ceiling is too low, which is a configuration problem, not a model
 		// one. Reported so it is fixable rather than looking like flakiness.
 		return Raw{}, fmt.Errorf("%w: response truncated at %d output tokens",
-			ErrInvalidOutput, p.maxOut)
+			ErrInvalidOutput, maxOut(task, p.maxOut))
 	}
 	if strings.TrimSpace(c.Message.Content) == "" {
 		return Raw{}, fmt.Errorf("%w: empty response", ErrInvalidOutput)
@@ -293,4 +298,11 @@ func (p *OpenAIProvider) Extract(ctx context.Context, text string) (Raw, error) 
 			CacheReadTokens: out.Usage.PromptDetails.CachedTokens,
 		},
 	}, nil
+}
+
+func maxOut(task Task, fallback int) int {
+	if task.MaxOutputTokens > 0 {
+		return task.MaxOutputTokens
+	}
+	return fallback
 }

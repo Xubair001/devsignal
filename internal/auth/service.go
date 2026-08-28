@@ -60,6 +60,11 @@ type Service struct {
 	log    *slog.Logger
 	policy Policy
 	clock  Clock
+	// mailer is optional. Without it verification tokens are still issued and
+	// recorded — they just cannot be delivered, which is reported rather than
+	// hidden, so a signup never fails because mail is unconfigured.
+	mailer  Mailer
+	baseURL string
 }
 
 func NewService(pool *pgxpool.Pool, log *slog.Logger, p Policy, c Clock) *Service {
@@ -80,7 +85,29 @@ type Tokens struct {
 type Identity struct {
 	UserID   pgtype.UUID
 	TenantID pgtype.UUID
+	// Role is read from the user row on every authentication, so revoking admin
+	// takes effect on the very next request rather than when a session expires.
+	// It costs nothing extra: Authenticate already loads that row.
+	Role string
+	// EmailVerified comes from the same row. The digest never mails an
+	// unverified address, so the console has to be able to say why nothing
+	// arrives rather than leaving it a silent dead end.
+	EmailVerified bool
 }
+
+// Roles. The database CHECK constraint holds the same two values, and it is the
+// authority — these constants exist so Go code cannot drift from it silently.
+const (
+	RoleUser  = "user"
+	RoleAdmin = "admin"
+)
+
+// IsAdmin reports whether this identity may reach the operations surface.
+//
+// A method rather than a comparison at each call site: an authorization check
+// spelled out by hand in nine places is nine chances to spell it wrong, and the
+// one that gets it wrong is always the destructive endpoint.
+func (i Identity) IsAdmin() bool { return i.Role == RoleAdmin }
 
 // inTx runs fn in a transaction, rolling back on error. Audit appends must be in
 // the same transaction as the change they describe, or a crash can leave the log
@@ -134,7 +161,10 @@ func (s *Service) Register(ctx context.Context, email, password, userAgent strin
 		if err != nil {
 			return err
 		}
-		ident = &Identity{UserID: user.ID, TenantID: user.TenantID}
+		ident = &Identity{
+			UserID: user.ID, TenantID: user.TenantID, Role: user.Role,
+			EmailVerified: user.EmailVerifiedAt.Valid,
+		}
 
 		return NewAuditor(q).Append(ctx, Event{
 			ActorID: &user.ID, TenantID: &user.TenantID,
@@ -205,7 +235,10 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent string) 
 	if err != nil {
 		return nil, nil, err
 	}
-	return tokens, &Identity{UserID: user.ID, TenantID: user.TenantID}, nil
+	return tokens, &Identity{
+		UserID: user.ID, TenantID: user.TenantID, Role: user.Role,
+		EmailVerified: user.EmailVerifiedAt.Valid,
+	}, nil
 }
 
 // issue creates a session plus the first refresh token of a new family.
@@ -322,7 +355,10 @@ func (s *Service) Refresh(ctx context.Context, refreshSecret, userAgent string) 
 	if err != nil {
 		return nil, nil, err
 	}
-	return tokens, &Identity{UserID: user.ID, TenantID: user.TenantID}, nil
+	return tokens, &Identity{
+		UserID: user.ID, TenantID: user.TenantID, Role: user.Role,
+		EmailVerified: user.EmailVerifiedAt.Valid,
+	}, nil
 }
 
 func (s *Service) revokeFamily(ctx context.Context, family, userID pgtype.UUID) int64 {
@@ -362,7 +398,10 @@ func (s *Service) Authenticate(ctx context.Context, sessionSecret string) (*Iden
 	if err := s.q.TouchSession(ctx, sess.ID); err != nil {
 		s.log.Warn("touch session", "err", err)
 	}
-	return &Identity{UserID: user.ID, TenantID: user.TenantID}, nil
+	return &Identity{
+		UserID: user.ID, TenantID: user.TenantID, Role: user.Role,
+		EmailVerified: user.EmailVerifiedAt.Valid,
+	}, nil
 }
 
 func (s *Service) Logout(ctx context.Context, sessionSecret string) error {

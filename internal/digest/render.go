@@ -198,7 +198,7 @@ func renderHTML(res Result) string {
 		if p.ApplyURL != nil {
 			fmt.Fprintf(&b,
 				`<div style="margin-top:12px"><a href="%s" `+
-					`style="font-size:13px;font-weight:600;color:#2563EB">Open role</a></div>`,
+					`style="font-size:13px;font-weight:600;color:#0B6FA4">Open role</a></div>`,
 				html.EscapeString(*p.ApplyURL))
 		}
 		b.WriteString(`</div>`)

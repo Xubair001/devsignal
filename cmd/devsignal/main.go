@@ -29,12 +29,15 @@ import (
 	"github.com/Xubair001/devsignal/internal/admin"
 	"github.com/Xubair001/devsignal/internal/auth"
 	"github.com/Xubair001/devsignal/internal/config"
+	"github.com/Xubair001/devsignal/internal/digest"
 	"github.com/Xubair001/devsignal/internal/embed"
 	"github.com/Xubair001/devsignal/internal/engagement"
 	"github.com/Xubair001/devsignal/internal/enrich"
 	"github.com/Xubair001/devsignal/internal/eval"
 	"github.com/Xubair001/devsignal/internal/ingest"
+	"github.com/Xubair001/devsignal/internal/lifecycle"
 	"github.com/Xubair001/devsignal/internal/loadtest"
+	"github.com/Xubair001/devsignal/internal/mail"
 	"github.com/Xubair001/devsignal/internal/matching"
 	"github.com/Xubair001/devsignal/internal/opportunity"
 	"github.com/Xubair001/devsignal/internal/pipeline"
@@ -62,7 +65,7 @@ func main() {
 		"api | worker | ingest-once | add-source | add-sources | source-health | "+
 			"spend | retrieve | match | eval | reindex-profiles | "+
 			"grant-admin | revoke-admin | list-admins | slo | loadtest | digest | "+
-			"digest-optin")
+			"digest-optin | skills | resume-skills | gaps | readiness")
 	srcName := flag.String("source", "", "source name, e.g. greenhouse:gitlab")
 	srcFile := flag.String("file", "", "file of source names, one per line (add-sources)")
 	reviewer := flag.String("reviewed-by", "", "who reviewed the platform (add-sources)")
@@ -75,6 +78,10 @@ func main() {
 		"eval: overwrite the committed baseline with this run (a reviewed act)")
 	dryRun := flag.Bool("dry-run", false,
 		"digest: compose and print, claim no day and send nothing")
+	unresolved := flag.Bool("unresolved", false,
+		"skills: list extracted phrases the vocabulary does not know")
+	demand := flag.Bool("demand", false,
+		"skills: snapshot today's skill demand instead of seeding")
 	timezone := flag.String("timezone", "UTC",
 		"digest-optin: the user's IANA timezone, e.g. Europe/London")
 	minBand := flag.String("min-band", "strong",
@@ -86,6 +93,7 @@ func main() {
 		email: *email, recordBaseline: *recordBaseline,
 		users: *users, concurrency: *concurrency, duration: *duration,
 		dryRun: *dryRun, timezone: *timezone, minBand: *minBand,
+		unresolved: *unresolved, demand: *demand,
 	}); err != nil {
 		// stderr, not the logger: the logger may be the thing that failed.
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -109,6 +117,8 @@ type flags struct {
 	dryRun         bool
 	timezone       string
 	minBand        string
+	unresolved     bool
+	demand         bool
 }
 
 func run(role string, f flags) error {
@@ -187,6 +197,14 @@ func run(role string, f flags) error {
 		return digestRun(ctx, cfg, log, pool, f)
 	case "digest-optin":
 		return digestOptIn(ctx, cfg, log, pool, f)
+	case "skills":
+		return skillsRun(ctx, cfg, log, pool, f)
+	case "resume-skills":
+		return resumeSkillsRun(ctx, cfg, log, pool, f)
+	case "gaps":
+		return gapsReport(ctx, cfg, log, pool, f)
+	case "readiness":
+		return readinessRun(ctx, cfg, log, pool, f)
 	default:
 		return fmt.Errorf("unknown role %q (api | worker | digest | admin)", role)
 	}
@@ -227,7 +245,13 @@ func openDB(ctx context.Context, cfg *config.Config, log *slog.Logger) (*pgxpool
 // never touch.
 func buildRouter(
 	ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool,
+	life *lifecycle.State,
 ) (http.Handler, error) {
+	if life == nil {
+		// A caller with no lifecycle (the load test, an in-process harness) is
+		// never draining.
+		life = lifecycle.New()
+	}
 	r := chi.NewRouter()
 	// No RealIP: it is vulnerable to spoofing (it trusts X-Forwarded-For /
 	// X-Real-IP whether or not your infrastructure sets them). When rate
@@ -245,8 +269,24 @@ func buildRouter(
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Readiness: can we serve traffic. This one does check the DB.
+	// Readiness: SHOULD we be sent traffic. Two reasons it can be no.
 	r.Get("/readyz", func(w http.ResponseWriter, req *http.Request) {
+		// Draining first, and before touching the database.
+		//
+		// http.Server.Shutdown waits for in-flight requests but does not stop the
+		// balancer sending NEW ones — those are refused at the socket, which is
+		// exactly the 502s a rolling deploy is supposed not to produce. Failing
+		// readiness before the drain starts is what makes the endpoint be removed
+		// while the server is still serving.
+		//
+		// Liveness deliberately keeps returning 200 through all of this: failing
+		// it would invite the orchestrator to SIGKILL a pod that is midway
+		// through finishing requests.
+		if life.Draining() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("draining"))
+			return
+		}
 		c, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 		defer cancel()
 		if err := pool.Ping(c); err != nil {
@@ -260,6 +300,21 @@ func buildRouter(
 	})
 
 	authSvc := auth.NewService(pool, log, auth.DefaultPolicy(), nil)
+
+	// The transport for transactional mail. Shared with the digest and gated on
+	// nothing: a user who withdraws digest consent still needs to verify an
+	// address. An unconfigured transport is a WARNING, not a failure — the token
+	// is still issued and recorded, so a signup never fails because mail is down.
+	mailer, merr := mail.NewSender(cfg.MailSender, cfg.MailLogDir, nil)
+	if merr != nil {
+		// A misconfigured transport stops startup. An UNCONFIGURED one does not —
+		// that is mail.NullSender, which refuses loudly per message. The
+		// difference matters: a typo in MAIL_SENDER must not silently disable mail.
+		return nil, fmt.Errorf("mail transport: %w", merr)
+	}
+	authSvc = authSvc.WithMailer(mailer, cfg.PublicBaseURL)
+	log.Info("mail transport ready", "sender", mailer.Name(),
+		"verification_links_point_at", cfg.PublicBaseURL)
 	authH := auth.NewHandler(authSvc, log)
 
 	// One instance, shared: the feed and the browse list must answer with the
@@ -285,6 +340,7 @@ func buildRouter(
 
 	matcher := matching.New(pool, log).WithSaturation(engagementSvc)
 	feedH := engagement.NewHandler(matcher, engagementSvc, oppSvc, log)
+	digestH := digest.NewHandler(pool, log)
 	adminH := admin.NewHandler(admin.New(pool, log), log)
 	sloH := admin.NewSLOHandler(pool, log)
 
@@ -321,6 +377,16 @@ func buildRouter(
 			// Reporting a listing is a user action, not an admin one, so it lives
 			// under the user API rather than behind the admin gate.
 			priv.Mount("/listings", adminH.FlagRoutes())
+			// Notification settings and the digest history. The caller's own data,
+			// so it reads identity from the context like everything else here.
+			priv.Mount("/notifications", digestH.Routes())
+			// Authenticated account actions. Resending a verification link needs a
+			// session so it can only ever target the caller's own address.
+			priv.Mount("/account", authH.AccountRoutes())
+			// The role travels to the client so the console can hide surfaces the
+			// caller cannot use. That is a USABILITY measure, not the security
+			// boundary: /internal/admin is still gated server-side and answers 404
+			// to a non-admin, because a hidden link is not an access control.
 			priv.Get("/me", func(w http.ResponseWriter, req *http.Request) {
 				id, ok := auth.FromContext(req.Context())
 				if !ok {
@@ -328,8 +394,11 @@ func buildRouter(
 					return
 				}
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"user_id":%q,"tenant_id":%q}`,
-					id.UserID.String(), id.TenantID.String())
+				_, _ = fmt.Fprintf(w,
+					`{"user_id":%q,"tenant_id":%q,"role":%q,"is_admin":%t,`+
+						`"email_verified":%t}`,
+					id.UserID.String(), id.TenantID.String(), id.Role, id.IsAdmin(),
+					id.EmailVerified)
 			})
 		})
 	})
@@ -344,10 +413,19 @@ func buildRouter(
 }
 
 func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) error {
-	handler, err := buildRouter(ctx, cfg, log, pool)
+	life := lifecycle.New()
+	handler, err := buildRouter(ctx, cfg, log, pool, life)
 	if err != nil {
 		return err
 	}
+
+	// A SECOND signal skips the drain delay. Someone holding Ctrl-C down is
+	// telling us to stop waiting, and making them wait through a five-second
+	// courtesy pause for a balancer that does not exist locally is the kind of
+	// small hostility that gets drains disabled.
+	hardStop, stopHard := signal.NotifyContext(
+		context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopHard()
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPAddr,
@@ -370,6 +448,23 @@ func serveAPI(ctx context.Context, cfg *config.Config, log *slog.Logger, pool *p
 		return fmt.Errorf("http server: %w", err)
 	case <-ctx.Done():
 		log.Info("shutdown signal received, draining")
+	}
+
+	// Fail readiness FIRST, then pause, then drain.
+	//
+	// The pause is the whole point and it is not a sleep for its own sake:
+	// endpoint removal is asynchronous everywhere, so a balancer needs at least
+	// one failed probe interval to stop routing here. Shutting down immediately
+	// would drain the requests we already have while the balancer keeps sending
+	// more into a closing socket.
+	life.BeginDraining()
+	log.Info("readiness failing; waiting for the load balancer to notice",
+		"pause", cfg.DrainDelay)
+	select {
+	case <-time.After(cfg.DrainDelay):
+	case <-hardStop.Done():
+		// A second signal means someone wants this over with now.
+		log.Warn("second shutdown signal; skipping the drain delay")
 	}
 
 	// Ordered shutdown. In Kubernetes a preStop delay is still required — the
@@ -1156,7 +1251,9 @@ func loadTest(
 ) error {
 	// The REAL router, in process. A load test against a hand-built handler
 	// measures the hand-built handler.
-	handler, err := buildRouter(ctx, cfg, log, pool)
+	// nil lifecycle: the load test drives the router in-process and is never
+	// draining.
+	handler, err := buildRouter(ctx, cfg, log, pool, nil)
 	if err != nil {
 		return err
 	}

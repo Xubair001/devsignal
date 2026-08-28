@@ -3,169 +3,380 @@
 /* ============================================================================
    Design tokens.
 
-   Light is defined on bare :root so the un-stamped "system" state resolves.
-   Dark is redefined twice — once behind prefers-color-scheme (guarded so an
-   explicit light choice beats a dark OS) and once behind [data-theme='dark'] so
-   the toggle wins in both directions. No colour is ever declared only inside a
-   media query or attribute block, which is the classic unreadable-theme bug.
+   Three theme states, not two. An explicit choice stamps data-theme on <html>;
+   the default "system" setting stamps NOTHING, and only prefers-color-scheme
+   separates light from dark there. So the palette is declared three times:
+
+     :root                                    complete light palette
+     @media dark + :root:not([data-theme=light])   dark, so a dark OS wins
+     :root[data-theme='dark']                 dark, so the toggle also wins
+
+   No colour is ever declared only inside a media query or an attribute block —
+   that is the classic unreadable-theme bug, where one theme's text lands on the
+   other theme's surface.
+
+   The dark VALUES are written once, as --d-* on :root, and the two dark blocks
+   only alias them. Before this they were duplicated literally, which meant a
+   palette tweak had to be made twice and the two copies could silently diverge.
    ========================================================================= */
+
 @theme {
-  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* --- type ---------------------------------------------------------------
+     Inter for the interface, with a real fallback stack because a silent
+     fallback to Arial changes every measurement on the page. JetBrains Mono
+     for numbers and code, where tabular digits are load-bearing: the fit
+     ledger and every table column line up on them. */
+  --font-sans:
+    'Inter var', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', system-ui, sans-serif;
+  --font-display:
+    'Plus Jakarta Sans', 'Inter var', Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-ground: #f8fafc;
+  /* A fixed scale, so a component cannot invent a size. Named by role rather
+     than by number: "the label size" survives a redesign, "text-11" does not.
+     The values were set FROM the audit rather than chosen first — the interface
+     had drifted to 21 distinct hardcoded sizes, and these nine are where they
+     actually clustered. Line heights travel with each step, because a size
+     without one is half a decision.
+     Nothing in the app may use an arbitrary text-[Npx] again. */
+  --text-micro: 10.5px;
+  --text-micro--line-height: 1.4;
+  --text-label: 11.5px;
+  --text-label--line-height: 1.45;
+  --text-meta: 12.5px;
+  --text-meta--line-height: 1.55;
+  --text-body: 13.5px;
+  --text-body--line-height: 1.6;
+  --text-base: 14px;
+  --text-base--line-height: 1.6;
+  --text-lead: 15.5px;
+  --text-lead--line-height: 1.5;
+  --text-title: 18px;
+  --text-title--line-height: 1.35;
+  --text-display: 22px;
+  --text-display--line-height: 1.22;
+  --text-hero: 32px;
+  --text-hero--line-height: 1.1;
+
+  /* --- radius ------------------------------------------------------------- */
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  /* --- light palette -----------------------------------------------------
+     The neutrals carry a slight cool bias toward the accent rather than being
+     pure grey: a mid-grey next to a saturated accent reads as unconsidered. */
+  --color-ground: #f6f9fb;
+  --color-ground-2: #eaf0f5;
   --color-surface: #ffffff;
-  --color-raised: #f1f5f9;
-  --color-hover: #f8fafc;
-  --color-line: rgb(15 23 42 / 0.09);
-  --color-line-strong: rgb(15 23 42 / 0.14);
-  --color-ink: #0f172a;
-  --color-ink-2: #475569;
-  --color-ink-3: #94a3b8;
+  --color-raised: #f0f4f8;
+  --color-hover: #f5f9fc;
+  --color-line: rgb(13 30 44 / 0.08);
+  --color-line-strong: rgb(13 30 44 / 0.15);
+  --color-ink: #0c1b26;
+  --color-ink-2: #46586a;
+  --color-ink-3: #7d8fa0;
 
-  --color-brand: #6366f1;
-  --color-brand-ink: #4f46e5;
-  --color-brand-wash: rgb(99 102 241 / 0.09);
+  /* Accent: a deep ocean blue.
+     Chosen against three constraints rather than for taste. It must not be
+     purple (replaced indigo). It must be unmistakable next to the semantic
+     colours — good is emerald, warn amber, bad red — so a teal or a green
+     accent would read as a status and this is pushed firmly blue-of-teal. And
+     it must hold 4.5:1 on both the white card and the near-black one, which is
+     why the light and dark values are not the same hue lightness.
+     One token: change these four lines and the whole interface follows. */
+  --color-brand: #0b6fa4;
+  --color-brand-ink: #075a86;
+  --color-brand-wash: rgb(11 111 164 / 0.085);
+  --color-brand-edge: rgb(11 111 164 / 0.26);
 
-  --color-good: #059669;
-  --color-good-wash: rgb(16 185 129 / 0.11);
-  --color-warn: #b45309;
-  --color-warn-wash: rgb(245 158 11 / 0.13);
-  --color-bad: #dc2626;
-  --color-bad-wash: rgb(239 68 68 / 0.1);
+  --color-good: #06845b;
+  --color-good-wash: rgb(6 132 91 / 0.1);
+  --color-warn: #a8590a;
+  --color-warn-wash: rgb(217 119 6 / 0.12);
+  --color-bad: #cf2222;
+  --color-bad-wash: rgb(207 34 34 / 0.09);
 
-  /* Unmeasurable is deliberately NOT a severity colour — it reads as absent. */
-  --color-null: #64748b;
-  --color-null-wash: rgb(100 116 139 / 0.09);
+  /* Unmeasurable is deliberately NOT a severity colour. It reads as absent,
+     because "nobody measured this" is a statement about us, not a warning
+     about the system. Giving it amber would make a visible gap look like a
+     fault, and the whole point of hard rule 26 is that the gap prompts a
+     question rather than an alarm. */
+  --color-null: #6b7688;
+  --color-null-wash: rgb(107 118 136 / 0.08);
 
-  --color-glass: rgb(255 255 255 / 0.72);
+  --color-glass: rgb(255 255 255 / 0.7);
+  --color-glass-line: rgb(13 30 44 / 0.07);
 
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
-  --shadow-raise: 0 2px 4px rgb(15 23 42 / 0.04), 0 8px 16px -4px rgb(15 23 42 / 0.08);
-  --shadow-float: 0 4px 8px rgb(15 23 42 / 0.04), 0 24px 48px -12px rgb(15 23 42 / 0.18);
+  --shadow-flat: 0 1px 1px rgb(13 30 44 / 0.03);
+  --shadow-card: 0 1px 2px rgb(13 30 44 / 0.04), 0 2px 6px -1px rgb(13 30 44 / 0.05);
+  --shadow-raise: 0 2px 4px rgb(13 30 44 / 0.04), 0 10px 20px -6px rgb(13 30 44 / 0.09);
+  --shadow-float: 0 6px 12px rgb(13 30 44 / 0.05), 0 28px 56px -14px rgb(13 30 44 / 0.2);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.6);
 
-  --ease-out-quart: cubic-bezier(0.4, 0, 0.2, 1);
+  /* --- motion -------------------------------------------------------------
+     Two curves and three durations. More than that and the page stops feeling
+     like one system. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+
+  /* --- dark values, declared once ---------------------------------------- */
+  --d-ground: #070c11;
+  --d-ground-2: #0b1219;
+  --d-surface: #101a22;
+  --d-raised: #16232d;
+  --d-hover: #1a2833;
+  --d-line: rgb(255 255 255 / 0.08);
+  --d-line-strong: rgb(255 255 255 / 0.16);
+  --d-ink: #fafafa;
+  --d-ink-2: #97a8b6;
+  --d-ink-3: #64798a;
+
+  --d-brand: #4cb2e0;
+  --d-brand-ink: #7fcbeb;
+  --d-brand-wash: rgb(76 178 224 / 0.14);
+  --d-brand-edge: rgb(76 178 224 / 0.32);
+
+  --d-good: #34d399;
+  --d-good-wash: rgb(52 211 153 / 0.13);
+  --d-warn: #fbbf24;
+  --d-warn-wash: rgb(251 191 36 / 0.13);
+  --d-bad: #f87171;
+  --d-bad-wash: rgb(248 113 113 / 0.13);
+  --d-null: #6b7688;
+  --d-null-wash: rgb(107 118 136 / 0.14);
+
+  --d-glass: rgb(7 12 17 / 0.72);
+  --d-glass-line: rgb(255 255 255 / 0.07);
+
+  --d-shadow-flat: 0 1px 1px rgb(0 0 0 / 0.3);
+  --d-shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 6px -1px rgb(0 0 0 / 0.3);
+  --d-shadow-raise: 0 2px 6px rgb(0 0 0 / 0.45), 0 12px 24px -8px rgb(0 0 0 / 0.5);
+  --d-shadow-float: 0 6px 14px rgb(0 0 0 / 0.5), 0 32px 64px -16px rgb(0 0 0 / 0.72);
+  --d-shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
 
+/* The dark palette, aliased. Both blocks are identical by construction, so a
+   value only ever changes in the --d-* set above. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --color-ground: #090d16;
-    --color-surface: #121826;
-    --color-raised: #171f30;
-    --color-hover: #18202f;
-    --color-line: rgb(255 255 255 / 0.08);
-    --color-line-strong: rgb(255 255 255 / 0.14);
-    --color-ink: #fafafa;
-    --color-ink-2: #94a3b8;
-    --color-ink-3: #64748b;
-
-    --color-brand: #818cf8;
-    --color-brand-ink: #a5b4fc;
-    --color-brand-wash: rgb(129 140 248 / 0.13);
-
-    --color-good: #34d399;
-    --color-good-wash: rgb(16 185 129 / 0.13);
-    --color-warn: #fbbf24;
-    --color-warn-wash: rgb(245 158 11 / 0.13);
-    --color-bad: #f87171;
-    --color-bad-wash: rgb(239 68 68 / 0.13);
-    --color-null: #64748b;
-    --color-null-wash: rgb(100 116 139 / 0.13);
-
-    --color-glass: rgb(9 13 22 / 0.72);
-
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
-    --shadow-raise: 0 2px 6px rgb(0 0 0 / 0.4), 0 12px 24px -8px rgb(0 0 0 / 0.5);
-    --shadow-float: 0 4px 10px rgb(0 0 0 / 0.45), 0 28px 56px -12px rgb(0 0 0 / 0.7);
+    --color-ground: var(--d-ground);
+    --color-ground-2: var(--d-ground-2);
+    --color-surface: var(--d-surface);
+    --color-raised: var(--d-raised);
+    --color-hover: var(--d-hover);
+    --color-line: var(--d-line);
+    --color-line-strong: var(--d-line-strong);
+    --color-ink: var(--d-ink);
+    --color-ink-2: var(--d-ink-2);
+    --color-ink-3: var(--d-ink-3);
+    --color-brand: var(--d-brand);
+    --color-brand-ink: var(--d-brand-ink);
+    --color-brand-wash: var(--d-brand-wash);
+    --color-brand-edge: var(--d-brand-edge);
+    --color-good: var(--d-good);
+    --color-good-wash: var(--d-good-wash);
+    --color-warn: var(--d-warn);
+    --color-warn-wash: var(--d-warn-wash);
+    --color-bad: var(--d-bad);
+    --color-bad-wash: var(--d-bad-wash);
+    --color-null: var(--d-null);
+    --color-null-wash: var(--d-null-wash);
+    --color-glass: var(--d-glass);
+    --color-glass-line: var(--d-glass-line);
+    --shadow-flat: var(--d-shadow-flat);
+    --shadow-card: var(--d-shadow-card);
+    --shadow-raise: var(--d-shadow-raise);
+    --shadow-float: var(--d-shadow-float);
+    --shadow-inset: var(--d-shadow-inset);
+    color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --color-ground: #090d16;
-  --color-surface: #121826;
-  --color-raised: #171f30;
-  --color-hover: #18202f;
-  --color-line: rgb(255 255 255 / 0.08);
-  --color-line-strong: rgb(255 255 255 / 0.14);
-  --color-ink: #fafafa;
-  --color-ink-2: #94a3b8;
-  --color-ink-3: #64748b;
-
-  --color-brand: #818cf8;
-  --color-brand-ink: #a5b4fc;
-  --color-brand-wash: rgb(129 140 248 / 0.13);
-
-  --color-good: #34d399;
-  --color-good-wash: rgb(16 185 129 / 0.13);
-  --color-warn: #fbbf24;
-  --color-warn-wash: rgb(245 158 11 / 0.13);
-  --color-bad: #f87171;
-  --color-bad-wash: rgb(239 68 68 / 0.13);
-  --color-null: #64748b;
-  --color-null-wash: rgb(100 116 139 / 0.13);
-
-  --color-glass: rgb(9 13 22 / 0.72);
-
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
-  --shadow-raise: 0 2px 6px rgb(0 0 0 / 0.4), 0 12px 24px -8px rgb(0 0 0 / 0.5);
-  --shadow-float: 0 4px 10px rgb(0 0 0 / 0.45), 0 28px 56px -12px rgb(0 0 0 / 0.7);
+  --color-ground: var(--d-ground);
+  --color-ground-2: var(--d-ground-2);
+  --color-surface: var(--d-surface);
+  --color-raised: var(--d-raised);
+  --color-hover: var(--d-hover);
+  --color-line: var(--d-line);
+  --color-line-strong: var(--d-line-strong);
+  --color-ink: var(--d-ink);
+  --color-ink-2: var(--d-ink-2);
+  --color-ink-3: var(--d-ink-3);
+  --color-brand: var(--d-brand);
+  --color-brand-ink: var(--d-brand-ink);
+  --color-brand-wash: var(--d-brand-wash);
+  --color-brand-edge: var(--d-brand-edge);
+  --color-good: var(--d-good);
+  --color-good-wash: var(--d-good-wash);
+  --color-warn: var(--d-warn);
+  --color-warn-wash: var(--d-warn-wash);
+  --color-bad: var(--d-bad);
+  --color-bad-wash: var(--d-bad-wash);
+  --color-null: var(--d-null);
+  --color-null-wash: var(--d-null-wash);
+  --color-glass: var(--d-glass);
+  --color-glass-line: var(--d-glass-line);
+  --shadow-flat: var(--d-shadow-flat);
+  --shadow-card: var(--d-shadow-card);
+  --shadow-raise: var(--d-shadow-raise);
+  --shadow-float: var(--d-shadow-float);
+  --shadow-inset: var(--d-shadow-inset);
+  color-scheme: dark;
 }
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
   }
+
   body {
     /* Explicit background from a token: a transparent body borrows the host's
-       ground and renders one theme's text on the other theme's surface. */
+       ground and renders one theme's text on the other theme's surface. The
+       gradient is a single very soft wash toward the accent — enough to stop
+       large empty areas reading as flat cardboard, not enough to notice. */
     background-color: var(--color-ground);
+    background-image:
+      radial-gradient(
+        ellipse 80% 50% at 50% -10%,
+        var(--color-brand-wash),
+        transparent 70%
+      );
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: var(--text-base);
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
     transition:
-      background-color 0.3s var(--ease-out-quart),
-      color 0.3s var(--ease-out-quart);
+      background-color var(--dur-slow) var(--ease-out-quart),
+      color var(--dur-slow) var(--ease-out-quart);
   }
+
   h1,
   h2,
   h3 {
-    letter-spacing: -0.017em;
+    font-family: var(--font-display);
+    letter-spacing: -0.021em;
     text-wrap: balance;
   }
+
+  /* A visible focus ring on everything keyboard-reachable, and never removed.
+     Two-tone so it reads on both a light card and a dark one. */
   :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
-    border-radius: 6px;
+    border-radius: var(--radius-xs);
   }
+
   ::selection {
     background: var(--color-brand-wash);
+    color: var(--color-ink);
+  }
+
+  /* Digits line up wherever they are compared. */
+  table,
+  .num {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer utilities {
   .glass {
     background-color: var(--color-glass);
-    backdrop-filter: blur(14px) saturate(180%);
-    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
   }
+
   .num {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Hides a scrollbar without removing the scrolling. Used on the horizontal
+     overflow containers that tables and diagram rows live in. */
   .no-bar {
     scrollbar-width: none;
   }
   .no-bar::-webkit-scrollbar {
     display: none;
   }
+
+  /* A one-pixel top highlight, which is what makes a card read as a surface
+     with an edge rather than a coloured rectangle. */
+  .edge-lit {
+    box-shadow: var(--shadow-card), var(--shadow-inset);
+  }
+
+  .rise {
+    animation: rise var(--dur-slow) var(--ease-out-quart) both;
+  }
+
+  /* Staggered entrance for a list. Six steps is enough for a feed page and
+     stops the whole grid arriving as one block. */
+  .stagger > * {
+    animation: rise var(--dur-slow) var(--ease-out-quart) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger > *:nth-child(6) { animation-delay: 200ms; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 240ms; }
 }
 
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-good-wash);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* Respected, not decorated around: motion sickness is a real accessibility
+   requirement and an entrance animation is never worth triggering it. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  body {
+    background-image: none;
   }
 }

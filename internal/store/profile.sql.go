@@ -103,7 +103,7 @@ func (q *Queries) CreateErasureRequest(ctx context.Context, userID pgtype.UUID) 
 const createResume = `-- name: CreateResume :one
 INSERT INTO resume (user_id, object_key, filename, content_type, size_bytes, sha256)
 VALUES ($1,$2,$3,$4,$5,$6)
-RETURNING id, user_id, object_key, text_object_key, filename, content_type, size_bytes, sha256, text_chars, parse_state, parse_error, uploaded_at, deleted_at
+RETURNING id, user_id, object_key, text_object_key, filename, content_type, size_bytes, sha256, text_chars, parse_state, parse_error, uploaded_at, deleted_at, skills_extracted_at, skills_model_id, skills_prompt_version, skills_schema_version, skills_redaction_version, skills_field_set, skills_redacted_chars, skills_sent_chars, skills_found, skills_resolved, skills_years_claimed, skills_seniority_claimed
 `
 
 type CreateResumeParams struct {
@@ -139,8 +139,36 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 		&i.ParseError,
 		&i.UploadedAt,
 		&i.DeletedAt,
+		&i.SkillsExtractedAt,
+		&i.SkillsModelID,
+		&i.SkillsPromptVersion,
+		&i.SkillsSchemaVersion,
+		&i.SkillsRedactionVersion,
+		&i.SkillsFieldSet,
+		&i.SkillsRedactedChars,
+		&i.SkillsSentChars,
+		&i.SkillsFound,
+		&i.SkillsResolved,
+		&i.SkillsYearsClaimed,
+		&i.SkillsSeniorityClaimed,
 	)
 	return i, err
+}
+
+const deleteManualProfileSkills = `-- name: DeleteManualProfileSkills :execrows
+DELETE FROM profile_skill WHERE user_id = $1 AND origin = 'manual'
+`
+
+// Clears only the skills the USER typed, leaving resume- and github-derived ones
+// intact. A manual edit means "this is my list of what I claim by hand", not
+// "discard everything we inferred from my documents" — and the origin column
+// exists precisely so the two can be told apart.
+func (q *Queries) DeleteManualProfileSkills(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteManualProfileSkills, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteProfileData = `-- name: DeleteProfileData :execrows
@@ -190,6 +218,24 @@ DELETE FROM profile_skill WHERE user_id = $1
 
 func (q *Queries) DeleteProfileSkills(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteProfileSkills, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteResumeOriginSkills = `-- name: DeleteResumeOriginSkills :execrows
+DELETE FROM profile_skill WHERE user_id = $1 AND origin = 'resume'
+`
+
+// Clears skills this user's RESUMES contributed, leaving manual ones intact.
+//
+// The mirror of DeleteManualProfileSkills. Re-extracting a resume must replace
+// what that resume claimed without discarding what the person typed by hand — a
+// manual entry is a stated claim and a resume reading is evidence, and evidence
+// being refreshed is not a reason to drop the claim.
+func (q *Queries) DeleteResumeOriginSkills(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteResumeOriginSkills, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -352,7 +398,7 @@ func (q *Queries) GetProfileEmbedding(ctx context.Context, arg GetProfileEmbeddi
 }
 
 const getResume = `-- name: GetResume :one
-SELECT id, user_id, object_key, text_object_key, filename, content_type, size_bytes, sha256, text_chars, parse_state, parse_error, uploaded_at, deleted_at FROM resume WHERE id = $1 AND deleted_at IS NULL
+SELECT id, user_id, object_key, text_object_key, filename, content_type, size_bytes, sha256, text_chars, parse_state, parse_error, uploaded_at, deleted_at, skills_extracted_at, skills_model_id, skills_prompt_version, skills_schema_version, skills_redaction_version, skills_field_set, skills_redacted_chars, skills_sent_chars, skills_found, skills_resolved, skills_years_claimed, skills_seniority_claimed FROM resume WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetResume(ctx context.Context, id pgtype.UUID) (Resume, error) {
@@ -372,6 +418,62 @@ func (q *Queries) GetResume(ctx context.Context, id pgtype.UUID) (Resume, error)
 		&i.ParseError,
 		&i.UploadedAt,
 		&i.DeletedAt,
+		&i.SkillsExtractedAt,
+		&i.SkillsModelID,
+		&i.SkillsPromptVersion,
+		&i.SkillsSchemaVersion,
+		&i.SkillsRedactionVersion,
+		&i.SkillsFieldSet,
+		&i.SkillsRedactedChars,
+		&i.SkillsSentChars,
+		&i.SkillsFound,
+		&i.SkillsResolved,
+		&i.SkillsYearsClaimed,
+		&i.SkillsSeniorityClaimed,
+	)
+	return i, err
+}
+
+const getResumeSkillProvenance = `-- name: GetResumeSkillProvenance :one
+SELECT r.id, r.filename, r.skills_extracted_at, r.skills_model_id,
+       r.skills_redaction_version, r.skills_field_set,
+       r.skills_found, r.skills_resolved,
+       r.skills_years_claimed, r.skills_seniority_claimed
+  FROM resume r
+ WHERE r.user_id = $1 AND r.deleted_at IS NULL
+   AND r.skills_extracted_at IS NOT NULL
+ ORDER BY r.skills_extracted_at DESC
+ LIMIT 1
+`
+
+type GetResumeSkillProvenanceRow struct {
+	ID                     pgtype.UUID
+	Filename               *string
+	SkillsExtractedAt      pgtype.Timestamptz
+	SkillsModelID          *string
+	SkillsRedactionVersion *string
+	SkillsFieldSet         *string
+	SkillsFound            *int32
+	SkillsResolved         *int32
+	SkillsYearsClaimed     *int16
+	SkillsSeniorityClaimed *string
+}
+
+// What a user can be told about their own resume extraction.
+func (q *Queries) GetResumeSkillProvenance(ctx context.Context, userID pgtype.UUID) (GetResumeSkillProvenanceRow, error) {
+	row := q.db.QueryRow(ctx, getResumeSkillProvenance, userID)
+	var i GetResumeSkillProvenanceRow
+	err := row.Scan(
+		&i.ID,
+		&i.Filename,
+		&i.SkillsExtractedAt,
+		&i.SkillsModelID,
+		&i.SkillsRedactionVersion,
+		&i.SkillsFieldSet,
+		&i.SkillsFound,
+		&i.SkillsResolved,
+		&i.SkillsYearsClaimed,
+		&i.SkillsSeniorityClaimed,
 	)
 	return i, err
 }
@@ -490,7 +592,7 @@ func (q *Queries) ListProfileSkills(ctx context.Context, userID pgtype.UUID) ([]
 }
 
 const listUserResumes = `-- name: ListUserResumes :many
-SELECT id, user_id, object_key, text_object_key, filename, content_type, size_bytes, sha256, text_chars, parse_state, parse_error, uploaded_at, deleted_at FROM resume WHERE user_id = $1 AND deleted_at IS NULL ORDER BY uploaded_at DESC
+SELECT id, user_id, object_key, text_object_key, filename, content_type, size_bytes, sha256, text_chars, parse_state, parse_error, uploaded_at, deleted_at, skills_extracted_at, skills_model_id, skills_prompt_version, skills_schema_version, skills_redaction_version, skills_field_set, skills_redacted_chars, skills_sent_chars, skills_found, skills_resolved, skills_years_claimed, skills_seniority_claimed FROM resume WHERE user_id = $1 AND deleted_at IS NULL ORDER BY uploaded_at DESC
 `
 
 func (q *Queries) ListUserResumes(ctx context.Context, userID pgtype.UUID) ([]Resume, error) {
@@ -516,6 +618,18 @@ func (q *Queries) ListUserResumes(ctx context.Context, userID pgtype.UUID) ([]Re
 			&i.ParseError,
 			&i.UploadedAt,
 			&i.DeletedAt,
+			&i.SkillsExtractedAt,
+			&i.SkillsModelID,
+			&i.SkillsPromptVersion,
+			&i.SkillsSchemaVersion,
+			&i.SkillsRedactionVersion,
+			&i.SkillsFieldSet,
+			&i.SkillsRedactedChars,
+			&i.SkillsSentChars,
+			&i.SkillsFound,
+			&i.SkillsResolved,
+			&i.SkillsYearsClaimed,
+			&i.SkillsSeniorityClaimed,
 		); err != nil {
 			return nil, err
 		}
@@ -525,6 +639,34 @@ func (q *Queries) ListUserResumes(ctx context.Context, userID pgtype.UUID) ([]Re
 		return nil, err
 	}
 	return items, nil
+}
+
+const profileSkillByAlias = `-- name: ProfileSkillByAlias :one
+SELECT s.id, s.canonical_slug::text AS slug, s.display_name
+  FROM skill_alias a JOIN skill s ON s.id = a.skill_id
+ WHERE a.alias = $1::citext
+ LIMIT 1
+`
+
+type ProfileSkillByAliasRow struct {
+	ID          pgtype.UUID
+	Slug        string
+	DisplayName string
+}
+
+// Resolves a user-typed skill name against the ontology.
+//
+// Alias-only, with NO create path, and that asymmetry with extraction is
+// deliberate. An extracted phrase is evidence from a posting and is worth
+// keeping even unrecognised; a user's typo is not evidence of anything, and
+// letting the profile mint skills would fill the vocabulary with one-off spellings
+// that then never match a posting. Unrecognised input is reported back to the
+// user instead.
+func (q *Queries) ProfileSkillByAlias(ctx context.Context, alias string) (ProfileSkillByAliasRow, error) {
+	row := q.db.QueryRow(ctx, profileSkillByAlias, alias)
+	var i ProfileSkillByAliasRow
+	err := row.Scan(&i.ID, &i.Slug, &i.DisplayName)
+	return i, err
 }
 
 const putProfileEmbedding = `-- name: PutProfileEmbedding :exec
@@ -590,6 +732,130 @@ func (q *Queries) RecordErasureStep(ctx context.Context, arg RecordErasureStepPa
 		arg.Detail,
 	)
 	return err
+}
+
+const recordResumeSkillExtraction = `-- name: RecordResumeSkillExtraction :exec
+UPDATE resume
+   SET skills_extracted_at      = now(),
+       skills_model_id          = $1,
+       skills_prompt_version    = $2,
+       skills_schema_version    = $3,
+       skills_redaction_version = $4,
+       skills_field_set         = $5,
+       skills_redacted_chars    = $6,
+       skills_sent_chars        = $7,
+       skills_found             = $8,
+       skills_resolved          = $9,
+       skills_years_claimed     = $10,
+       skills_seniority_claimed = $11
+ WHERE id = $12
+`
+
+type RecordResumeSkillExtractionParams struct {
+	ModelID          *string
+	PromptVersion    *string
+	SchemaVersion    *string
+	RedactionVersion *string
+	FieldSet         *string
+	RedactedChars    *int32
+	SentChars        *int32
+	SkillsFound      *int32
+	SkillsResolved   *int32
+	YearsClaimed     *int16
+	SeniorityClaimed *string
+	ID               pgtype.UUID
+}
+
+// Stamps what was sent, to whom, and what came back.
+//
+// The counts are counts, never values. "3 email addresses removed" is auditable;
+// the addresses themselves would put the PII back into the record we keep to
+// prove we did not retain it.
+func (q *Queries) RecordResumeSkillExtraction(ctx context.Context, arg RecordResumeSkillExtractionParams) error {
+	_, err := q.db.Exec(ctx, recordResumeSkillExtraction,
+		arg.ModelID,
+		arg.PromptVersion,
+		arg.SchemaVersion,
+		arg.RedactionVersion,
+		arg.FieldSet,
+		arg.RedactedChars,
+		arg.SentChars,
+		arg.SkillsFound,
+		arg.SkillsResolved,
+		arg.YearsClaimed,
+		arg.SeniorityClaimed,
+		arg.ID,
+	)
+	return err
+}
+
+const resumesNeedingSkills = `-- name: ResumesNeedingSkills :many
+SELECT r.id, r.user_id, r.text_object_key, r.skills_extracted_at
+  FROM resume r
+ -- 'text_extracted' is the state a successful upload reaches, not 'parsed'.
+ -- The latter is reserved for a structured parse that does not exist yet, and
+ -- filtering on it meant this query matched nothing at all — a batch that
+ -- reports "nothing to do" for every resume is indistinguishable from one that
+ -- is working.
+ WHERE r.parse_state IN ('text_extracted', 'parsed')
+   AND r.deleted_at IS NULL
+   AND r.text_object_key IS NOT NULL
+   AND (r.skills_extracted_at IS NULL
+        OR r.skills_prompt_version IS DISTINCT FROM $1::text
+        OR r.skills_model_id IS DISTINCT FROM $2::text
+        OR r.skills_redaction_version IS DISTINCT FROM $3::text)
+ ORDER BY r.uploaded_at DESC
+ LIMIT $4::int
+`
+
+type ResumesNeedingSkillsParams struct {
+	PromptVersion    string
+	ModelID          string
+	RedactionVersion string
+	MaxRows          int32
+}
+
+type ResumesNeedingSkillsRow struct {
+	ID                pgtype.UUID
+	UserID            pgtype.UUID
+	TextObjectKey     *string
+	SkillsExtractedAt pgtype.Timestamptz
+}
+
+// Resumes whose text is parsed but whose skills have not been extracted, or were
+// extracted under a superseded prompt, model or redaction version.
+//
+// The version comparison is the cache: a prompt change re-extracts, an unchanged
+// prompt does not. Hard rule 8 applied to resumes — re-extracting under the same
+// inputs would make a profile's skills flap for a document that did not change.
+func (q *Queries) ResumesNeedingSkills(ctx context.Context, arg ResumesNeedingSkillsParams) ([]ResumesNeedingSkillsRow, error) {
+	rows, err := q.db.Query(ctx, resumesNeedingSkills,
+		arg.PromptVersion,
+		arg.ModelID,
+		arg.RedactionVersion,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResumesNeedingSkillsRow
+	for rows.Next() {
+		var i ResumesNeedingSkillsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TextObjectKey,
+			&i.SkillsExtractedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setResumeText = `-- name: SetResumeText :exec

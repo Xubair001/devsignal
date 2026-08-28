@@ -11,6 +11,7 @@ import { IconButton } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { EmptyState, ErrorState, SectionHead, Skeleton } from '@/components/ui/States';
 import { cn } from '@/components/ui/cn';
+import { PurgeSource } from '@/features/admin/PurgeSource';
 
 type SortKey = 'name' | 'status' | 'postings' | 'yield' | 'polled';
 const PER_PAGE = 8;
@@ -113,7 +114,7 @@ export function SourcesPage() {
         hint="Parse yield is per source, never aggregated — an average stays green while one board rots."
       />
 
-      <Card className="overflow-hidden p-0">
+      <Card pad="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[940px] border-collapse">
             <caption className="sr-only">Registered sources with health and legal review state</caption>
@@ -124,10 +125,10 @@ export function SourcesPage() {
                 <SortTh label="Postings" k="postings" active={sortKey} dir={dir} onSort={setSort} align="right" />
                 <SortTh label="Parse yield" k="yield" active={sortKey} dir={dir} onSort={setSort} align="right" />
                 <SortTh label="Last success" k="polled" active={sortKey} dir={dir} onSort={setSort} />
-                <th className="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                <th className="px-3.5 py-2.5 text-left text-label font-semibold uppercase tracking-wider text-ink-3">
                   Legal review
                 </th>
-                <th className="px-3.5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                <th className="px-3.5 py-2.5 text-right text-label font-semibold uppercase tracking-wider text-ink-3">
                   Actions
                 </th>
               </tr>
@@ -148,7 +149,7 @@ export function SourcesPage() {
                   <td colSpan={7} className="p-0">
                     <EmptyState title="No sources registered">
                       Register one with{' '}
-                      <code className="font-mono text-[12px]">make add-source name=greenhouse:gitlab</code>{' '}
+                      <code className="font-mono text-meta">make add-source name=greenhouse:gitlab</code>{' '}
                       — the reviewable unit is the ATS platform, not the company board.
                     </EmptyState>
                   </td>
@@ -171,13 +172,13 @@ export function SourcesPage() {
                       <span className="flex items-center gap-2">
                         <span
                           title={`Tier ${s.tier.toUpperCase()} — public, documented, unauthenticated`}
-                          className="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-brand-wash text-[10px] font-bold uppercase text-brand-ink"
+                          className="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-brand-wash text-micro font-bold uppercase text-brand-ink"
                         >
                           {s.tier}
                         </span>
-                        <span className="font-mono text-[13px] font-medium">{s.name}</span>
+                        <span className="font-mono text-body font-medium">{s.name}</span>
                       </span>
-                      <span className="mt-0.5 block pl-[26px] font-mono text-[11.5px] text-ink-3">
+                      <span className="mt-0.5 block pl-[26px] font-mono text-label text-ink-3">
                         {s.type}
                       </span>
                     </td>
@@ -186,13 +187,13 @@ export function SourcesPage() {
                       <Pill tone={tone}>{s.status[0]!.toUpperCase() + s.status.slice(1)}</Pill>
                     </td>
 
-                    <td className="px-3.5 py-2.5 text-right text-[13px] num">
+                    <td className="px-3.5 py-2.5 text-right text-body num">
                       {s.postings_attributed.toLocaleString()}
                     </td>
 
                     <td className="px-3.5 py-2.5">
                       <span className="flex items-center justify-end gap-2.5">
-                        <span className="font-mono text-[13px] num">
+                        <span className="font-mono text-body num">
                           {y === null ? '—' : `${(y * 100).toFixed(1)}%`}
                         </span>
                         <span aria-hidden className="h-[5px] w-[54px] shrink-0 overflow-hidden rounded-sm bg-raised">
@@ -204,7 +205,7 @@ export function SourcesPage() {
                       </span>
                     </td>
 
-                    <td className="px-3.5 py-2.5 font-mono text-[12.5px] text-ink-3">
+                    <td className="px-3.5 py-2.5 font-mono text-meta text-ink-3">
                       {relativeTime(s.last_success_at)}
                     </td>
 
@@ -263,6 +264,11 @@ export function SourcesPage() {
                             </svg>
                           </IconButton>
                         )}
+
+                        {/* Purge is the destructive one, so it is a labelled
+                            button rather than an icon: an icon is too easy to hit
+                            by accident for an action that deletes postings. */}
+                        <PurgeSource sourceID={s.id} sourceName={s.name} />
                       </span>
                     </td>
                   </tr>
@@ -274,7 +280,7 @@ export function SourcesPage() {
 
         {sources.isSuccess && rows.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3.5 py-2.5">
-            <span className="text-[12.5px] text-ink-3 num">
+            <span className="text-meta text-ink-3 num">
               {start + 1}–{Math.min(start + PER_PAGE, rows.length)} of {rows.length} sources
             </span>
             <span className="flex items-center gap-1">
@@ -326,7 +332,7 @@ function SortTh({
   return (
     <th
       aria-sort={on ? (dir === 1 ? 'ascending' : 'descending') : undefined}
-      className="p-0 text-[11px] font-semibold uppercase tracking-wider text-ink-3"
+      className="p-0 text-label font-semibold uppercase tracking-wider text-ink-3"
     >
       <button
         onClick={() => onSort(k)}
@@ -376,7 +382,7 @@ function PageBtn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid h-[30px] min-w-[30px] cursor-pointer place-items-center rounded-md border px-2 text-[12.5px] font-medium num transition-colors',
+        'grid h-[30px] min-w-[30px] cursor-pointer place-items-center rounded-md border px-2 text-meta font-medium num transition-colors',
         current
           ? 'border-transparent bg-brand text-white'
           : 'border-line bg-surface text-ink-2 hover:border-line-strong hover:bg-raised hover:text-ink',

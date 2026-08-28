@@ -64,8 +64,85 @@ sighting — never the employer's claimed post date, which boards refresh.
 **5. Nothing is computed here.** No score, no band, no eligibility. Two clients that derive a
 number will disagree with each other and with the backend's decision log.
 
+**6. A skill the ontology cannot place is shown, not dropped.** The profile deliberately cannot
+mint new skills — a typo would become a vocabulary entry that then matches no posting — so
+`unresolved_skills` comes back from the server and those names render struck through with an
+explanation. Silently dropping one would leave the user believing a skill counts when it counts
+toward nothing.
+
+**7. A gap is a count of postings, never a chance.** `/app/gaps` answers "what should I learn",
+which is precisely where a competitiveness estimate would feel natural and is precisely what is
+forbidden — we have no applicant counts. The page states what its numbers are, and an e2e test
+asserts no assertion of chances, odds, readiness or percentile survives on it. That test drops
+NEGATED sentences before matching, because the page deliberately names what it does not do and two
+earlier versions flagged its own disclaimers.
+
+**8. The posting body is rendered as HTML, and that is only safe because the server filters it.**
+`description_html` is third-party content from a board anyone can post to. It is sanitized
+server-side through an allow-list before it is served (see hard rule 29); rendering it here without
+that would be stored XSS.
+
 Meaning is never carried by colour alone: every `Pill` tone ships a glyph, and the fit ledger has an
 `sr-only` table fallback because the breakdown is the product's core claim.
+
+## Routes
+
+Public at the root, the console under `/app`. Separated rather than switching on the session at
+`/`, because a deep link has to mean one thing: `/app/browse/:id` is always the console and `/` is
+always the public page, whoever is looking.
+
+| Route | Who | What it is |
+|---|---|---|
+| `/` | public | Landing page |
+| `/login`, `/register` | public | Two routes over one form — a browser password manager keys on the URL |
+| `/app/feed` | member | Today's feed with the fit ledger, save/apply, dismiss-with-reason |
+| `/app/saved` | member | Saved roles, each with its current liveness state |
+| `/app/gaps` | member | What your eligible roles ask for that you have not listed |
+| `/app/browse`, `/app/browse/:id` | member | The corpus, filtered and keyset-paginated, plus posting detail |
+| `/app/profile` | member | Preferences, skills, resume upload, account erasure |
+| `/app/settings` | member | Digest consent, quiet hours, caps, minimum band, send history |
+| `/app/overview` | **operator** | SLOs, pipeline state, liveness recency |
+| `/app/sources` | **operator** | Source table with yield, quarantine and purge |
+| `/app/merges` | **operator** | Merge candidates dedup withheld for a human |
+| `/app/flags` | **operator** | The listing-flag queue |
+
+`/app` redirects to the feed for every role: the overview reads the admin-gated SLO report, so
+making it the landing screen would greet a member with a surface they cannot load.
+
+## Access control
+
+`RequireAuth` redirects to `/login` and carries the attempted path, so signing in returns you where
+you were going. `RequireAdmin` gates the operator routes.
+
+**Neither is a security boundary.** The server gates `/internal/admin` independently and answers
+404 to a non-admin. These exist so a member never sees a link to a page that would only show them
+an error, and so a bookmarked operator URL degrades into a clear message rather than four failed
+queries. The client-side refusal deliberately uses the same "does not exist" language the API does:
+telling someone a page exists but is forbidden is information they did not have.
+
+`navFor(isAdmin)` filters the sidebar, the mobile drawer and the ⌘K palette from **one** source.
+Three lists that each decide what exists is how a hidden destination stays reachable from one of
+them.
+
+## What talks to what
+
+Every endpoint the API exposes now has a caller, which was not true before — the console used six
+of about thirty-five:
+
+| Surface | Endpoints |
+|---|---|
+| Feed | `feed`, `feed/excluded`, `engagement/{saved,applied,opened,dismissed}`, `engagement/dismiss-reasons` |
+| Saved | `engagement/saved` |
+| Corpus | `opportunities`, `opportunities/{id}` |
+| Profile | `profile` (GET/PUT), `profile/resume`, `profile/resumes`, erasure |
+| Notifications | `notifications` (GET/PUT), `consent`, `history` |
+| Report a listing | `listings/flag-reasons`, `listings/{id}/flag` |
+| Operations | `slo`, `sources`, `sources/{id}/{health,status,requeue,purge-plan,purge}`, `flags`, `flags/{id}/resolve`, `merge-candidates`, `merge-candidates/{id}/resolve`, `opportunities/{id}/{sources,unmerge,requeue}` |
+
+Two closed sets — dismissal reasons and flag reasons — are **fetched, not hardcoded**. A dismissal
+reason is a training label, and the vocabulary belongs to whatever will learn from it; a client copy
+drifts the moment the set changes, and the symptom is a reason the server rejects or silently stores
+as something else.
 
 ## Structure
 
@@ -97,6 +174,47 @@ tag is invisible to both compilers — Go builds, `tsc` passes, the field arrive
 `internal/apicontract` covers that: a reflection test listing every json path this console reads,
 which fails if one is renamed or removed. It needs no database and runs on every `make test`. If
 you add a field to a card, add its path there too.
+
+## Testing
+
+```bash
+npm run build          # tsc -b, then vite build. A type error fails it.
+make web-e2e           # responsive + access control, in a real browser
+```
+
+The e2e suite exists for the two bug classes `tsc` cannot see: **a page that pans
+sideways**, and **a surface a role should not reach**. Both were found by hand first, and both
+would come back silently.
+
+`e2e/responsive.spec.ts` covers the public pages; `e2e/console.spec.ts` covers all nine `/app`
+routes with a seeded session, so the tables are tested **with data in them** — a responsive test
+against a skeleton screen proves nothing. Five viewports, 320px to 1440px.
+
+Two real bugs it caught on the first run, neither visible in review:
+
+- The `sr-only` accessibility table in `FitLedger` was 688px wide and panned the whole page at
+  320px. Tailwind's `sr-only` sets `width: 1px`, but a `<table>` ignores any width below its
+  min-content — so the clip never applied. `sr-only` now lives on a wrapping `div`.
+- The ⌘K palette's "Toggle theme" did nothing: it finds the button by `[data-theme-toggle]` and
+  no such attribute existed. Nothing else exercises that command.
+
+CI runs the public suite only. The console suite needs a live API and a seeded session, and a
+responsive test against a login redirect proves nothing.
+
+## Typography and spacing
+
+Nine named type steps, in `index.css`, each with its own line height. The values were set **from**
+an audit rather than chosen first: the interface had drifted to 21 distinct hardcoded `text-[Npx]`
+values, and these are where they actually clustered. Nothing may use an arbitrary pixel size again —
+`grep -rhoE "text-\[[0-9.]+px\]" src/` should return nothing.
+
+`Card` takes an enumerated `pad` (`none` / `tight` / `normal`) rather than a padding className. The
+same audit found seven paddings in use for the same job, which is what makes a set of cards read as
+unrelated rectangles instead of one system. Padding tightens on small screens in `Card` alone, so no
+page has to remember to.
+
+Wide content scrolls inside its own container — never by making the page body pan sideways, which is
+the most common responsive failure and is always a table.
 
 ## Theme
 

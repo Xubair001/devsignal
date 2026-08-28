@@ -3,7 +3,7 @@ import { cn } from '@/components/ui/cn';
 
 /**
  * The band is the headline, and it comes from the server. Four values, and the
- * fourth is the honest one: "Not enough information" is a statement about our
+ * fourth is the honest one:"Not enough information" is a statement about our
  * evidence, not about the user, so it gets a neutral tone rather than the
  * warning colour a weak match would earn.
  */
@@ -43,7 +43,7 @@ export function BandHeader({ fit }: { fit: FitView }) {
 
   return (
     <div className="flex items-center justify-between gap-2.5 border-y border-line bg-raised px-4 py-2.5">
-      <span className={cn('flex items-center gap-1.5 text-[13px] font-semibold', tone.text)}>
+      <span className={cn('flex items-center gap-1.5 text-body font-semibold', tone.text)}>
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -59,9 +59,9 @@ export function BandHeader({ fit }: { fit: FitView }) {
         {fit.band}
       </span>
 
-      {/* Earned out of achievable — never a percentage, and the "possible"
+      {/* Earned out of achievable — never a percentage, and the"possible"
           wording is what makes a partial model legible. */}
-      <span className="whitespace-nowrap font-mono text-[12px] text-ink-2 num">
+      <span className="whitespace-nowrap font-mono text-meta text-ink-2 num">
         <b className="font-semibold text-ink">{fit.points}</b>
         {partial ? ` of a possible ${fit.max_points}` : ` of ${fit.max_points}`}
       </span>

@@ -13,7 +13,7 @@ const VARIANT: Record<Variant, string> = {
 
 const BASE =
   'inline-flex h-[31px] cursor-pointer items-center gap-1.5 rounded-md border px-[11px] ' +
-  'text-[12.5px] font-medium no-underline transition-all duration-200 ease-out-quart ' +
+  'text-meta font-medium no-underline transition-all duration-200 ease-out-quart ' +
   'hover:-translate-y-px disabled:pointer-events-none disabled:opacity-40 ' +
   'aria-disabled:pointer-events-none aria-disabled:opacity-40 ' +
   'aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink';

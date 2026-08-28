@@ -49,6 +49,25 @@ func (q *Queries) AttachExtractionToOpportunity(ctx context.Context, arg AttachE
 	return result.RowsAffected(), nil
 }
 
+const countSkillsAndAliases = `-- name: CountSkillsAndAliases :one
+SELECT (SELECT count(*) FROM skill)::bigint       AS skills,
+       (SELECT count(*) FROM skill_alias)::bigint AS aliases,
+       (SELECT count(*) FROM skill_edge)::bigint  AS edges
+`
+
+type CountSkillsAndAliasesRow struct {
+	Skills  int64
+	Aliases int64
+	Edges   int64
+}
+
+func (q *Queries) CountSkillsAndAliases(ctx context.Context) (CountSkillsAndAliasesRow, error) {
+	row := q.db.QueryRow(ctx, countSkillsAndAliases)
+	var i CountSkillsAndAliasesRow
+	err := row.Scan(&i.Skills, &i.Aliases, &i.Edges)
+	return i, err
+}
+
 const extractionSpendReport = `-- name: ExtractionSpendReport :many
 SELECT created_at::date AS day, model_id, lane,
        count(*)::int AS calls,
@@ -270,6 +289,228 @@ DELETE FROM opportunity_skill WHERE opportunity_id = $1
 func (q *Queries) ReplaceOpportunitySkills(ctx context.Context, opportunityID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, replaceOpportunitySkills, opportunityID)
 	return err
+}
+
+const seedSkill = `-- name: SeedSkill :one
+INSERT INTO skill (canonical_slug, display_name, ontology_version)
+VALUES ($1::citext, $2, $3)
+ON CONFLICT (canonical_slug) DO UPDATE SET
+    display_name     = excluded.display_name,
+    ontology_version = excluded.ontology_version
+RETURNING id
+`
+
+type SeedSkillParams struct {
+	Slug            string
+	DisplayName     string
+	OntologyVersion string
+}
+
+// Idempotent insert of a canonical skill. The ontology version is updated on an
+// existing row so a re-seed after a vocabulary change is visible rather than
+// silently identical.
+func (q *Queries) SeedSkill(ctx context.Context, arg SeedSkillParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, seedSkill, arg.Slug, arg.DisplayName, arg.OntologyVersion)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedSkillAlias = `-- name: SeedSkillAlias :exec
+INSERT INTO skill_alias (skill_id, alias)
+VALUES ($1, $2::citext)
+ON CONFLICT (alias) DO UPDATE SET skill_id = excluded.skill_id
+`
+
+type SeedSkillAliasParams struct {
+	SkillID pgtype.UUID
+	Alias   string
+}
+
+// Binds a normalized alias to a canonical skill.
+//
+// ON CONFLICT (alias) rather than DO NOTHING: the unique index on alias is what
+// makes normalization a function, and a re-seed that moves an alias from one
+// skill to another must actually move it. Silently keeping the old binding would
+// leave the database disagreeing with the committed ontology.
+func (q *Queries) SeedSkillAlias(ctx context.Context, arg SeedSkillAliasParams) error {
+	_, err := q.db.Exec(ctx, seedSkillAlias, arg.SkillID, arg.Alias)
+	return err
+}
+
+const seedSkillEdge = `-- name: SeedSkillEdge :exec
+INSERT INTO skill_edge (from_skill_id, to_skill_id, relation)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type SeedSkillEdgeParams struct {
+	FromSkillID pgtype.UUID
+	ToSkillID   pgtype.UUID
+	Relation    string
+}
+
+func (q *Queries) SeedSkillEdge(ctx context.Context, arg SeedSkillEdgeParams) error {
+	_, err := q.db.Exec(ctx, seedSkillEdge, arg.FromSkillID, arg.ToSkillID, arg.Relation)
+	return err
+}
+
+const skillDemandDays = `-- name: SkillDemandDays :one
+SELECT count(DISTINCT day)::bigint AS days,
+       coalesce(max(day)::text, '')::text AS latest
+  FROM skill_demand_daily
+`
+
+type SkillDemandDaysRow struct {
+	Days   int64
+	Latest string
+}
+
+func (q *Queries) SkillDemandDays(ctx context.Context) (SkillDemandDaysRow, error) {
+	row := q.db.QueryRow(ctx, skillDemandDays)
+	var i SkillDemandDaysRow
+	err := row.Scan(&i.Days, &i.Latest)
+	return i, err
+}
+
+const skillIDBySlug = `-- name: SkillIDBySlug :one
+SELECT id FROM skill WHERE canonical_slug = $1::citext
+`
+
+func (q *Queries) SkillIDBySlug(ctx context.Context, slug string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, skillIDBySlug, slug)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const snapshotSkillDemand = `-- name: SnapshotSkillDemand :execrows
+INSERT INTO skill_demand_daily (skill_id, day, country, work_mode, posting_count)
+SELECT os.skill_id,
+       $1::date,
+       coalesce(nullif(o.location_country, ''), '??')::char(2),
+       coalesce(nullif(o.work_mode, ''), 'unknown'),
+       count(DISTINCT o.id)::int
+  FROM opportunity_skill os
+  JOIN opportunity o ON o.id = os.opportunity_id
+ WHERE o.pipeline_state = 'ready'
+   AND o.closed_at IS NULL
+   AND o.merged_into IS NULL
+ GROUP BY os.skill_id, coalesce(nullif(o.location_country, ''), '??'),
+          coalesce(nullif(o.work_mode, ''), 'unknown')
+ON CONFLICT (skill_id, day, country, work_mode) DO UPDATE
+   SET posting_count = excluded.posting_count
+`
+
+// THE MOAT, written daily. Blueprint §9: this cannot be backfilled, because you
+// cannot retroactively observe what the market wanted last quarter.
+//
+// A recomputed SNAPSHOT of what is live on `day`, not an incrementing counter.
+// A counter would double-count every re-extraction and drift with no way to
+// audit it; a snapshot is idempotent, so running the job twice in a day is
+// harmless and a missed day is a visible gap rather than a silent
+// under-count.
+//
+// Grouped by country and work_mode because demand is not global: "Go, remote,
+// hiring US-only" and "Go, onsite, Berlin" are different markets, and averaging
+// them answers no question anyone has. An unstated country becomes '??' rather
+// than being dropped, so the total stays reconcilable against the corpus.
+func (q *Queries) SnapshotSkillDemand(ctx context.Context, day pgtype.Date) (int64, error) {
+	result, err := q.db.Exec(ctx, snapshotSkillDemand, day)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const topSkillDemand = `-- name: TopSkillDemand :many
+SELECT s.display_name, sum(d.posting_count)::bigint AS postings,
+       count(DISTINCT d.country)::int AS countries
+  FROM skill_demand_daily d
+  JOIN skill s ON s.id = d.skill_id
+ WHERE d.day = $1::date
+ GROUP BY s.id, s.display_name
+ ORDER BY postings DESC, s.display_name
+ LIMIT $2::int
+`
+
+type TopSkillDemandParams struct {
+	Day     pgtype.Date
+	MaxRows int32
+}
+
+type TopSkillDemandRow struct {
+	DisplayName string
+	Postings    int64
+	Countries   int32
+}
+
+// What the market is asking for on one day, most-demanded first.
+func (q *Queries) TopSkillDemand(ctx context.Context, arg TopSkillDemandParams) ([]TopSkillDemandRow, error) {
+	rows, err := q.db.Query(ctx, topSkillDemand, arg.Day, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TopSkillDemandRow
+	for rows.Next() {
+		var i TopSkillDemandRow
+		if err := rows.Scan(&i.DisplayName, &i.Postings, &i.Countries); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unresolvedExtractedSkills = `-- name: UnresolvedExtractedSkills :many
+SELECT s.canonical_slug::text AS slug, s.display_name,
+       count(DISTINCT os.opportunity_id)::bigint AS postings
+  FROM skill s
+  JOIN opportunity_skill os ON os.skill_id = s.id
+ WHERE s.ontology_version <> $1
+ GROUP BY s.id, s.canonical_slug, s.display_name
+ ORDER BY postings DESC, s.canonical_slug
+ LIMIT $2::int
+`
+
+type UnresolvedExtractedSkillsParams struct {
+	OntologyVersion string
+	MaxRows         int32
+}
+
+type UnresolvedExtractedSkillsRow struct {
+	Slug        string
+	DisplayName string
+	Postings    int64
+}
+
+// Skills created by extraction that the committed ontology does not know.
+//
+// The review queue for the vocabulary. Ordered by how often they appear, because
+// a phrase seen on forty postings is worth adding and one seen once is usually
+// noise. This is how the ontology grows from evidence instead of guesswork.
+func (q *Queries) UnresolvedExtractedSkills(ctx context.Context, arg UnresolvedExtractedSkillsParams) ([]UnresolvedExtractedSkillsRow, error) {
+	rows, err := q.db.Query(ctx, unresolvedExtractedSkills, arg.OntologyVersion, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnresolvedExtractedSkillsRow
+	for rows.Next() {
+		var i UnresolvedExtractedSkillsRow
+		if err := rows.Scan(&i.Slug, &i.DisplayName, &i.Postings); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertSkillByAlias = `-- name: UpsertSkillByAlias :one

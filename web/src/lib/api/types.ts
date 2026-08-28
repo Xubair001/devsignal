@@ -241,3 +241,262 @@ export type AdminFlag = {
 };
 
 export type FlagsResponse = { flags: AdminFlag[] };
+
+/* ---------------------------------------------------------------- profile --- */
+
+export type ProfileSkill = {
+  slug: string;
+  name: string;
+  /** Where the claim came from. A resume-derived skill is not a typed one. */
+  origin: 'manual' | 'resume' | 'github';
+  proficiency: number | null;
+  years: number | null;
+};
+
+export type Profile = {
+  headline: string | null;
+  years_experience: number | null;
+  seniority: string | null;
+  is_management: boolean;
+  target_role_families: string[];
+  target_countries: string[];
+  work_mode_preference: string | null;
+  target_employment_types: string[];
+  languages: string[];
+  min_salary: { min_minor: number; currency: string; period: string } | null;
+  work_authorization: Record<string, string> | null;
+  skills: ProfileSkill[];
+  /** Lets a client tell whether a fit score it holds is still current. */
+  profile_version: number;
+  /**
+   * Skill names the ontology could not place. Returned rather than dropped: the
+   * profile cannot mint new skills, so an unrecognised name counts toward
+   * nothing and the user has to be told which one.
+   */
+  unresolved_skills?: string[];
+};
+
+export type ProfileInput = {
+  headline: string | null;
+  years_experience: number | null;
+  seniority: string | null;
+  is_management: boolean;
+  target_role_families: string[];
+  target_countries: string[];
+  work_mode_preference: string | null;
+  target_employment_types: string[];
+  languages: string[];
+  min_salary_minor: number | null;
+  salary_currency: string | null;
+  salary_period: string | null;
+  work_authorization: Record<string, string> | null;
+  /** Absent means "not editing skills". [] means "clear them". */
+  skills?: { name: string; proficiency: number | null; years: number | null }[];
+};
+
+export type Resume = {
+  id: string;
+  filename: string | null;
+  size_bytes: number;
+  text_chars: number | null;
+  parse_state: string;
+  parse_error: string | null;
+  uploaded_at: string;
+  /* Object keys and extracted text are deliberately absent from the API. */
+};
+
+/** The handler wraps this as `items`, not `resumes`. */
+export type ResumesResponse = { items: Resume[] };
+
+/* ------------------------------------------------------------ corpus read --- */
+
+export type OpportunityPage = { items: Posting[]; next_cursor?: string };
+
+export type OpportunityDetail = Posting & {
+  description_html: string | null;
+  open_similar_roles_at_company: number;
+};
+
+/* ----------------------------------------------------------------- saved --- */
+
+export type SavedItem = {
+  opportunity_id: string;
+  saved_at: string;
+  posting: Posting;
+};
+
+export type SavedResponse = {
+  items: SavedItem[];
+  next_before: string | null;
+  /** Saves whose posting is gone. Shown, so a shrinking list is explained. */
+  closed_since_saved: number;
+};
+
+/* --------------------------------------------------------- notifications --- */
+
+export type NotificationSettings = {
+  timezone: string;
+  quiet_start: number;
+  quiet_end: number;
+  digest_enabled: boolean;
+  max_per_week: number;
+  min_band: 'strong' | 'worth_a_look';
+  send_when_empty: boolean;
+  consent_at: string | null;
+  consent_wording_version: string | null;
+  consent_withdrawn_at: string | null;
+  /** False when no row exists: "never asked" is not "said no". */
+  configured: boolean;
+};
+
+export type DigestSend = {
+  local_date: string;
+  outcome: string;
+  reason: string | null;
+  item_count: number;
+  sent_at: string | null;
+  attempts: number;
+};
+
+export type DigestHistory = { sends: DigestSend[] };
+
+/* ------------------------------------------------------------------ auth --- */
+
+export type Session = {
+  user_id: string;
+  tenant_id: string;
+  role: 'user' | 'admin';
+  /**
+   * Whether the operations surface is reachable.
+   *
+   * Sent so the console can hide what the caller cannot use. It is NOT the
+   * security boundary: /internal/admin is gated server-side and answers 404 to a
+   * non-admin, because a hidden link is not an access control.
+   */
+  is_admin: boolean;
+  /**
+   * Whether the address has been confirmed.
+   *
+   * Load-bearing rather than cosmetic: the digest never mails an unverified
+   * address — that is how a sending domain's reputation is lost, and it may not
+   * even be the user's address — so an unverified account can configure the
+   * digest and still receive nothing. Surfacing it is the difference between a
+   * fixable prompt and a silent dead end.
+   */
+  email_verified: boolean;
+};
+
+export type LoginResponse = {
+  session_token: string;
+  refresh_token: string;
+  /** RFC 3339 UTC. */
+  expires_at: string;
+};
+
+/* ----------------------------------------------------------- merge queue --- */
+
+export type MergeCandidate = {
+  id: string;
+  left_opportunity_id: string;
+  right_opportunity_id: string;
+  left_title: string;
+  right_title: string;
+  reason: string;
+  confidence: number;
+  withheld_because: string;
+  created_at: string;
+};
+
+export type MergeCandidatesResponse = { candidates: MergeCandidate[] };
+
+/* ------------------------------------------------------- server-owned sets --- */
+
+/**
+ * A closed set the SERVER owns.
+ *
+ * Fetched rather than hardcoded, because a dismissal reason is a training label
+ * and the label vocabulary belongs to whatever will learn from it. A client copy
+ * drifts the moment the set changes, and the symptom is a reason the server
+ * rejects or, worse, silently stores as something else.
+ */
+export type Choice = { value: string; label: string };
+export type ChoicesResponse = { reasons: Choice[] };
+
+/* ---------------------------------------------------------- listing flags --- */
+
+export type FlagInput = { reason: string; detail?: string };
+
+/* ------------------------------------------------------------ provenance --- */
+
+export type OpportunitySource = {
+  id: string;
+  source_name: string;
+  ats_type: string | null;
+  ats_job_id: string | null;
+  apply_url: string | null;
+  /** Set when this row arrived by a merge rather than by direct ingest. */
+  merge_reason: string | null;
+  merge_confidence: number | null;
+  merged_by: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+};
+
+export type MergedIn = {
+  id: string;
+  title: string;
+  source_rows: number;
+};
+
+export type ProvenanceResponse = {
+  sources: OpportunitySource[];
+  /** Postings merged INTO this one. Each can be un-merged. */
+  merged_in: MergedIn[];
+};
+
+/* --------------------------------------------------------- source purge --- */
+
+export type PurgePlan = {
+  source_id: string;
+  total_attributed: number;
+  /** Postings this source contributed that no other source also saw. */
+  will_be_deleted: number;
+  also_seen_elsewhere: number;
+  merged: number;
+};
+
+/* ------------------------------------------------------------ skill gaps --- */
+
+export type SkillGap = {
+  slug: string;
+  name: string;
+  /** A COUNT OF POSTINGS. Never divide it into a percentage. */
+  required_by: number;
+  preferred_by: number;
+};
+
+export type SkillStrength = { name: string; required_by: number };
+
+/**
+ * Question four: what should I learn to be more competitive.
+ *
+ * Every number is a count of postings. There is deliberately no competitiveness
+ * estimate and no probability — we have no applicant counts, and one invented
+ * figure would discredit the honest ones beside it. The client renders these as
+ * counts and must not derive a percentage from them.
+ */
+export type SkillGaps = {
+  /**
+   * The two empty cases look identical and have OPPOSITE fixes, so the server
+   * names which one it is rather than leaving the client to guess from a zero:
+   *   stale                    the gate has not run since the profile changed
+   *   insufficient_extraction  it ran, but too few of those roles could be read
+   */
+  state: 'ready' | 'stale' | 'insufficient_extraction';
+  gaps: SkillGap[];
+  strengths: SkillStrength[];
+  /** The denominator. Without it every count above is unreadable. */
+  eligible: number;
+  with_skills: number;
+  excluded_unknown_phrases: number;
+};

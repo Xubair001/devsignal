@@ -45,6 +45,24 @@ func testService(t *testing.T, pool *pgxpool.Pool) *Service {
 	return NewService(pool, b, quiet())
 }
 
+// testServiceWithLogger is testService with the log captured, for the PII guard.
+func testServiceWithLogger(t *testing.T, pool *pgxpool.Pool, log *slog.Logger) *Service {
+	t.Helper()
+	ep := os.Getenv("S3_ENDPOINT")
+	if ep == "" {
+		t.Skip("S3_ENDPOINT not set")
+	}
+	b, err := blob.New(context.Background(), blob.Config{
+		Endpoint: ep, Bucket: "devsignal-pii-" + uuid.NewString()[:8],
+		AccessKey: os.Getenv("S3_ACCESS_KEY"), SecretKey: os.Getenv("S3_SECRET_KEY"),
+		PathStyle: true,
+	})
+	if err != nil {
+		t.Fatalf("blob: %v", err)
+	}
+	return NewService(pool, b, log)
+}
+
 // newUser creates a real user through the auth service, so the fixture exercises
 // the same rows a live signup produces.
 func newUser(t *testing.T, pool *pgxpool.Pool) (pgtype.UUID, pgtype.UUID) {
@@ -542,5 +560,111 @@ func TestErasureRemovesDigestDataAndCountsIt(t *testing.T) {
 		if !seen[loc] {
 			t.Errorf("the erasure report does not mention %q", loc)
 		}
+	}
+}
+
+// TestErasureRemovesResumeSkillProvenance.
+//
+// The resume-skill extraction record — which model read the document, under which
+// redaction — lives on the `resume` row rather than in the shared `extraction`
+// table, and that placement is load-bearing. `extraction` is keyed on a content
+// hash and has no user_id, so a resume extraction cached there would be
+// user-derived data that erasure could not scope a delete to. On the resume row
+// it cascades with a store already in the inventory.
+//
+// This asserts the placement actually holds: the record goes, the resume-origin
+// skills go, and a manual skill is NOT collateral damage before erasure runs.
+func TestErasureRemovesResumeSkillProvenance(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	svc := testService(t, pool)
+	userID, tenantID := newUser(t, pool)
+	q := store.New(pool)
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO profile (user_id, tenant_id, headline) VALUES ($1,$2,'x')`,
+		userID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+
+	var resumeID pgtype.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO resume (user_id, object_key, text_object_key, filename,
+		    content_type, size_bytes, sha256, parse_state,
+		    skills_extracted_at, skills_model_id, skills_redaction_version,
+		    skills_field_set, skills_found, skills_resolved)
+		VALUES ($1,'k','tk','cv.txt','text/plain',10,'h','text_extracted',
+		        now(),'openai:gpt-5-mini','redact-test','resume_text:redacted',9,7)
+		RETURNING id`, userID).Scan(&resumeID); err != nil {
+		t.Fatal(err)
+	}
+
+	// One resume-derived skill and one hand-typed skill.
+	var skillID pgtype.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO skill (canonical_slug, display_name, ontology_version)
+		VALUES ($1,'Erasure Probe','test')
+		ON CONFLICT (canonical_slug) DO UPDATE SET display_name = excluded.display_name
+		RETURNING id`, "erasure-probe-"+uuid.NewString()[:8]).Scan(&skillID); err != nil {
+		t.Fatal(err)
+	}
+	for _, origin := range []string{"resume", "manual"} {
+		if err := q.UpsertProfileSkill(ctx, store.UpsertProfileSkillParams{
+			UserID: userID, SkillID: skillID, Origin: origin,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The extraction record is visible before erasure, so this test cannot pass
+	// by the row never having existed.
+	var found int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM resume
+		 WHERE user_id=$1 AND skills_extracted_at IS NOT NULL`, userID).Scan(&found); err != nil {
+		t.Fatal(err)
+	}
+	if found != 1 {
+		t.Fatalf("the extraction record was not written; found %d", found)
+	}
+
+	rep, err := svc.Erase(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Complete {
+		t.Error("erasure did not complete")
+	}
+	if rep.TracesRemaining != 0 {
+		t.Errorf("%d traces remain", rep.TracesRemaining)
+	}
+
+	// The resume row, and with it every skills_* column, is gone.
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM resume WHERE user_id=$1`, userID).Scan(&found); err != nil {
+		t.Fatal(err)
+	}
+	if found != 0 {
+		t.Errorf("%d resume rows survived, taking the extraction record with them", found)
+	}
+
+	// And both profile skills, whatever their origin.
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM profile_skill WHERE user_id=$1`, userID).Scan(&found); err != nil {
+		t.Fatal(err)
+	}
+	if found != 0 {
+		t.Errorf("%d profile_skill rows survived", found)
+	}
+
+	// The shared extraction cache holds NOTHING keyed to this user, which is the
+	// whole reason the record lives on the resume row.
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM extraction WHERE prompt_version LIKE 'rp-%'`).Scan(&found); err != nil {
+		t.Fatal(err)
+	}
+	if found != 0 {
+		t.Errorf("%d resume extractions are cached in the shared table, where erasure "+
+			"cannot scope a delete to one user", found)
 	}
 }

@@ -94,3 +94,40 @@ SELECT count(*) FROM audit_log;
 
 -- name: ListAuditForChainCheck :many
 SELECT id, prev_hash, entry_hash, action, occurred_at FROM audit_log ORDER BY id;
+
+-- name: CreateUserToken :one
+-- A single-use token for a transactional flow: email verification or a password
+-- reset.
+--
+-- Only the HASH is stored, like a session token. A leaked database must not hand
+-- someone else's verification link to whoever read it, and the plaintext exists
+-- only long enough to put in an email.
+INSERT INTO user_token (user_id, purpose, token_hash, expires_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(purpose), sqlc.arg(token_hash), sqlc.arg(expires_at))
+RETURNING *;
+
+-- name: ConsumeUserToken :one
+-- Claims a token, atomically, exactly once.
+--
+-- The UPDATE is the claim: consumed_at IS NULL in the WHERE clause means two
+-- concurrent requests cannot both succeed, and a replayed link finds nothing.
+-- Expiry is checked here too rather than in Go, so a clock difference between
+-- process and database cannot widen the window.
+UPDATE user_token
+   SET consumed_at = now()
+ WHERE token_hash = sqlc.arg(token_hash)
+   AND purpose = sqlc.arg(purpose)
+   AND consumed_at IS NULL
+   AND expires_at > now()
+RETURNING *;
+
+-- name: ExpireUserTokensOfPurpose :execrows
+-- Invalidates a user's outstanding tokens for one purpose.
+--
+-- Called when a new one is issued, so "resend" cannot leave two live links: the
+-- older one stops working the moment a newer is created, which is what makes the
+-- most recent email the only one that matters.
+UPDATE user_token SET consumed_at = now()
+ WHERE user_id = sqlc.arg(user_id) AND purpose = sqlc.arg(purpose)
+   AND consumed_at IS NULL;
+

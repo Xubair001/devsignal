@@ -67,11 +67,11 @@ export function FlagsPage() {
         )}
 
         {flags.data?.flags.map((f) => (
-          <Card key={f.id} as="article" lift className="flex flex-col gap-2.5 p-3.5">
+          <Card key={f.id} as="article" lift pad="tight" className="flex flex-col gap-2.5">
             <div className="flex items-start justify-between gap-2.5">
               <div className="min-w-0">
-                <p className="text-[13px] font-semibold">{REASON_LABEL[f.reason] ?? f.reason}</p>
-                <p className="truncate text-[12px] text-ink-3">
+                <p className="text-body font-semibold">{REASON_LABEL[f.reason] ?? f.reason}</p>
+                <p className="truncate text-meta text-ink-3">
                   {f.title}
                   {f.company_name && ` · ${f.company_name}`}
                 </p>
@@ -84,13 +84,13 @@ export function FlagsPage() {
             </div>
 
             {f.detail && (
-              <blockquote className="rounded-r-md border-l-2 border-line-strong bg-raised px-3 py-2.5 text-[12.5px] italic text-ink-2">
+              <blockquote className="rounded-r-md border-l-2 border-line-strong bg-raised px-3 py-2.5 text-meta italic text-ink-2">
                 {f.detail}
               </blockquote>
             )}
 
             <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="font-mono text-[11.5px] text-ink-3">{relativeTime(f.created_at)}</span>
+              <span className="font-mono text-label text-ink-3">{relativeTime(f.created_at)}</span>
               {f.posting_closed && <Pill tone="neutral">Posting already closed</Pill>}
               <span className="flex-1" />
               <Button
@@ -111,7 +111,7 @@ export function FlagsPage() {
         ))}
       </div>
 
-      <p className="mt-4 max-w-[70ch] text-[12px] leading-relaxed text-ink-3">
+      <p className="mt-4 max-w-[70ch] text-meta leading-relaxed text-ink-3">
         <b className="font-semibold text-ink-2">Upholding a report does not close the posting.</b>{' '}
         Closure has exactly one cause — a successful poll in which the posting was absent — and a
         second path to it would make the liveness guarantee unverifiable. To act on a bad source,

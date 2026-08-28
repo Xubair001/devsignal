@@ -55,14 +55,17 @@ func (h *Handler) RequireAdmin(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		if err := h.svc.Authorize(r.Context(), id.UserID); err != nil {
-			if !errors.Is(err, ErrForbidden) {
-				h.log.Error("authorizing admin", "err", err)
-			}
+		// The role comes from the context, which Authenticate populated from the
+		// user row on THIS request. So revoking admin takes effect immediately,
+		// and there is no second lookup of a row we already read.
+		if !id.IsAdmin() {
 			// Logged at warn so an attempt to reach the surface is visible without
 			// being an error. The audit log records successful actions; this records
 			// refused ones.
-			h.log.Warn("admin access refused", "user_id", id.UserID.String())
+			h.log.Warn("admin access refused",
+				"user_id", id.UserID.String(), "role", id.Role)
+			// 404, not 403. A 403 confirms the surface exists, which tells an
+			// unauthorized caller exactly what to go looking for.
 			http.NotFound(w, r)
 			return
 		}

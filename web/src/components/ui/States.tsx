@@ -35,7 +35,7 @@ export function SkeletonCards({ count = 4, height = 'h-[132px]' }: { count?: num
 
 /**
  * The empty state carries product meaning here, so it takes a written
- * explanation rather than a shrug. "Nothing met your bar today" is a feature.
+ * explanation rather than a shrug."Nothing met your bar today" is a feature.
  */
 export function EmptyState({
   title,
@@ -49,8 +49,8 @@ export function EmptyState({
   return (
     <Card className="col-span-full flex flex-col items-center gap-2 px-6 py-12 text-center">
       {icon && <div className="mb-1 text-ink-3">{icon}</div>}
-      <p className="text-[15px] font-semibold">{title}</p>
-      {children && <p className="max-w-[46ch] text-[13px] leading-relaxed text-ink-3">{children}</p>}
+      <p className="text-lead font-semibold">{title}</p>
+      {children && <p className="max-w-[46ch] text-body leading-relaxed text-ink-3">{children}</p>}
     </Card>
   );
 }
@@ -71,15 +71,15 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
         : ['Could not reach the API', 'Check that the Go service is running on port 8080.'];
 
   return (
-    <Card className="col-span-full flex flex-col items-start gap-3 border-bad/30 p-5">
+    <Card className="col-span-full flex flex-col items-start gap-3 border-bad/30">
       <div>
-        <p className="text-[14px] font-semibold text-bad">{title}</p>
-        <p className="mt-0.5 max-w-[60ch] text-[13px] leading-relaxed text-ink-2">{detail}</p>
+        <p className="text-base font-semibold text-bad">{title}</p>
+        <p className="mt-0.5 max-w-[60ch] text-body leading-relaxed text-ink-2">{detail}</p>
       </div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="cursor-pointer rounded-md border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink-2 transition-colors hover:bg-raised hover:text-ink"
+          className="cursor-pointer rounded-md border border-line bg-surface px-3 py-1.5 text-meta font-medium text-ink-2 transition-colors hover:bg-raised hover:text-ink"
         >
           Try again
         </button>
@@ -99,9 +99,27 @@ export function SectionHead({
 }) {
   return (
     <div className="mb-3 mt-7 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 first:mt-0">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
-      {hint && <p className="text-[12.5px] text-ink-3">{hint}</p>}
+      <h2 className="text-lead font-semibold">{title}</h2>
+      {hint && <p className="text-meta text-ink-3">{hint}</p>}
       {action && <div className="ml-auto">{action}</div>}
+    </div>
+  );
+}
+
+/** A missing route. Says what to do, not just what went wrong. */
+export function NotFound() {
+  return (
+    <div className="grid place-items-center py-20 text-center">
+      <div className="max-w-[40ch]">
+        <p className="font-mono text-body text-ink-3">404</p>
+        <h1 className="mt-2 text-title font-bold tracking-[-0.02em]">
+          That page does not exist
+        </h1>
+        <p className="mt-2 text-body leading-relaxed text-ink-3">
+          Press <kbd className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-label">⌘K</kbd>{' '}
+          to jump to any section.
+        </p>
+      </div>
     </div>
   );
 }

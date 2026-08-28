@@ -126,7 +126,7 @@ export function OverviewPage() {
       </div>
 
       {live && (
-        <p className="mt-2.5 text-[12px] leading-relaxed text-ink-3">
+        <p className="mt-2.5 text-meta leading-relaxed text-ink-3">
           <b className="font-semibold text-ink-2">On “verified within 24h”:</b> {live.note} Oldest
           check is {formatDuration(live.oldest_check_hours * 3600)} old.
         </p>
@@ -163,7 +163,7 @@ export function OverviewPage() {
         }
       />
 
-      <Card className="overflow-hidden p-0">
+      <Card pad="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse">
             <caption className="sr-only">Pipeline state distribution</caption>
@@ -183,9 +183,9 @@ export function OverviewPage() {
                   p.records === 0 ? 'Empty' : p.stranded ? 'Stranded' : terminal ? 'Terminal' : 'Moving';
                 return (
                   <tr key={p.state} className="border-b border-line transition-colors last:border-0 hover:bg-hover">
-                    <td className="px-3.5 py-2.5 font-mono text-[13px] font-medium">{p.state}</td>
-                    <td className="px-3.5 py-2.5 text-right text-[13px] num">{p.records.toLocaleString()}</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono text-[12.5px] text-ink-3">
+                    <td className="px-3.5 py-2.5 font-mono text-body font-medium">{p.state}</td>
+                    <td className="px-3.5 py-2.5 text-right text-body num">{p.records.toLocaleString()}</td>
+                    <td className="px-3.5 py-2.5 text-right font-mono text-meta text-ink-3">
                       {p.records === 0 ? '—' : relativeTime(p.oldest_entered)}
                     </td>
                     <td className="px-3.5 py-2.5">
@@ -196,7 +196,7 @@ export function OverviewPage() {
               })}
               {slo.isSuccess && slo.data.pipeline_states.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3.5 py-6 text-center text-[13px] text-ink-3">
+                  <td colSpan={4} className="px-3.5 py-6 text-center text-body text-ink-3">
                     No postings in the pipeline yet. Register a source and run an ingest.
                   </td>
                 </tr>
@@ -213,7 +213,7 @@ function Th({ children, align = 'left' }: { children: React.ReactNode; align?: '
   return (
     <th
       className={
-        'px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 ' +
+        'px-3.5 py-2.5 text-label font-semibold uppercase tracking-wider text-ink-3 ' +
         (align === 'right' ? 'text-right' : 'text-left')
       }
     >

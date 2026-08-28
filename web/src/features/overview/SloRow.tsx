@@ -42,7 +42,7 @@ export function SloRow({ result }: { result: SloResult }) {
       <span aria-hidden className={cn('w-[3px] shrink-0 self-stretch rounded-sm', STRIPE[result.status])} />
 
       <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium">
+        <p className="flex flex-wrap items-center gap-1.5 text-body font-medium">
           {result.description}
           <Pill tone={result.status}>{LABEL[result.status]}</Pill>
           {result.alert_severity !== 'none' && (
@@ -51,18 +51,18 @@ export function SloRow({ result }: { result: SloResult }) {
             </Pill>
           )}
         </p>
-        <p className="mt-0.5 text-[12px] leading-relaxed text-ink-3">{result.detail}</p>
+        <p className="mt-0.5 text-meta leading-relaxed text-ink-3">{result.detail}</p>
 
         {result.burn_rate !== null && result.burn_rate > 1 && (
-          <p className="mt-1 font-mono text-[11.5px] text-warn num">
+          <p className="mt-1 font-mono text-label text-warn num">
             burning {result.burn_rate.toFixed(1)}× of the error budget
           </p>
         )}
       </div>
 
-      <p className="shrink-0 text-right font-mono text-[13px] font-semibold num">
+      <p className="shrink-0 text-right font-mono text-body font-semibold num">
         {formatObserved(result.kind, result.observed)}
-        <span className="block text-[11px] font-medium text-ink-3">
+        <span className="block text-label font-medium text-ink-3">
           of {formatObserved(result.kind, result.target)}
         </span>
       </p>

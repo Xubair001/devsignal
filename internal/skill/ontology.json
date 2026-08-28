@@ -1,0 +1,2523 @@
+{
+ "skills": [
+  {
+   "slug": "go",
+   "display_name": "Go",
+   "family": "language",
+   "aliases": [
+    "golang",
+    "go lang"
+   ]
+  },
+  {
+   "slug": "python",
+   "display_name": "Python",
+   "family": "language",
+   "aliases": [
+    "py",
+    "python3"
+   ]
+  },
+  {
+   "slug": "javascript",
+   "display_name": "JavaScript",
+   "family": "language",
+   "aliases": [
+    "js",
+    "ecmascript",
+    "es6"
+   ]
+  },
+  {
+   "slug": "typescript",
+   "display_name": "TypeScript",
+   "family": "language",
+   "aliases": [
+    "ts"
+   ]
+  },
+  {
+   "slug": "java",
+   "display_name": "Java",
+   "family": "language",
+   "aliases": [
+    "java se",
+    "core java"
+   ]
+  },
+  {
+   "slug": "kotlin",
+   "display_name": "Kotlin",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "ruby",
+   "display_name": "Ruby",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "rust",
+   "display_name": "Rust",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "cpp",
+   "display_name": "C++",
+   "family": "language",
+   "aliases": [
+    "cplusplus"
+   ]
+  },
+  {
+   "slug": "c",
+   "display_name": "C",
+   "family": "language",
+   "aliases": [
+    "c language"
+   ]
+  },
+  {
+   "slug": "csharp",
+   "display_name": "C#",
+   "family": "language",
+   "aliases": [
+    "c sharp",
+    "dotnet c#"
+   ]
+  },
+  {
+   "slug": "php",
+   "display_name": "PHP",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "swift",
+   "display_name": "Swift",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "objectivec",
+   "display_name": "Objective-C",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "scala",
+   "display_name": "Scala",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "elixir",
+   "display_name": "Elixir",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "erlang",
+   "display_name": "Erlang",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "haskell",
+   "display_name": "Haskell",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "clojure",
+   "display_name": "Clojure",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "perl",
+   "display_name": "Perl",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "lua",
+   "display_name": "Lua",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "r",
+   "display_name": "R",
+   "family": "language",
+   "aliases": [
+    "r language"
+   ]
+  },
+  {
+   "slug": "dart",
+   "display_name": "Dart",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "sql",
+   "display_name": "SQL",
+   "family": "language",
+   "aliases": [
+    "structured query language"
+   ]
+  },
+  {
+   "slug": "bash",
+   "display_name": "Bash",
+   "family": "language",
+   "aliases": [
+    "shell",
+    "shell scripting",
+    "sh",
+    "zsh",
+    "shell script"
+   ]
+  },
+  {
+   "slug": "powershell",
+   "display_name": "PowerShell",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "html",
+   "display_name": "HTML",
+   "family": "language",
+   "aliases": [
+    "html5",
+    "html css",
+    "html/css",
+    "html5 css3"
+   ]
+  },
+  {
+   "slug": "css",
+   "display_name": "CSS",
+   "family": "language",
+   "aliases": [
+    "css3"
+   ]
+  },
+  {
+   "slug": "solidity",
+   "display_name": "Solidity",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "groovy",
+   "display_name": "Groovy",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "matlab",
+   "display_name": "MATLAB",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "assembly",
+   "display_name": "Assembly",
+   "family": "language",
+   "aliases": [
+    "asm"
+   ]
+  },
+  {
+   "slug": "fsharp",
+   "display_name": "F#",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "zig",
+   "display_name": "Zig",
+   "family": "language",
+   "aliases": []
+  },
+  {
+   "slug": "react",
+   "display_name": "React",
+   "family": "frontend",
+   "aliases": [
+    "reactjs",
+    "react js"
+   ]
+  },
+  {
+   "slug": "vuejs",
+   "display_name": "Vue",
+   "family": "frontend",
+   "aliases": [
+    "vue",
+    "vue 3"
+   ]
+  },
+  {
+   "slug": "angular",
+   "display_name": "Angular",
+   "family": "frontend",
+   "aliases": [
+    "angularjs",
+    "angular 2+"
+   ]
+  },
+  {
+   "slug": "svelte",
+   "display_name": "Svelte",
+   "family": "frontend",
+   "aliases": [
+    "sveltekit"
+   ]
+  },
+  {
+   "slug": "nextjs",
+   "display_name": "Next.js",
+   "family": "frontend",
+   "aliases": [
+    "next"
+   ]
+  },
+  {
+   "slug": "nuxtjs",
+   "display_name": "Nuxt",
+   "family": "frontend",
+   "aliases": [
+    "nuxt"
+   ]
+  },
+  {
+   "slug": "remix",
+   "display_name": "Remix",
+   "family": "frontend",
+   "aliases": []
+  },
+  {
+   "slug": "emberjs",
+   "display_name": "Ember",
+   "family": "frontend",
+   "aliases": []
+  },
+  {
+   "slug": "jquery",
+   "display_name": "jQuery",
+   "family": "frontend",
+   "aliases": []
+  },
+  {
+   "slug": "tailwindcss",
+   "display_name": "Tailwind CSS",
+   "family": "frontend",
+   "aliases": [
+    "tailwind"
+   ]
+  },
+  {
+   "slug": "sass",
+   "display_name": "Sass",
+   "family": "frontend",
+   "aliases": [
+    "scss"
+   ]
+  },
+  {
+   "slug": "webpack",
+   "display_name": "Webpack",
+   "family": "frontend",
+   "aliases": []
+  },
+  {
+   "slug": "vite",
+   "display_name": "Vite",
+   "family": "frontend",
+   "aliases": []
+  },
+  {
+   "slug": "redux",
+   "display_name": "Redux",
+   "family": "frontend",
+   "aliases": []
+  },
+  {
+   "slug": "d3",
+   "display_name": "D3",
+   "family": "frontend",
+   "aliases": [
+    "d3 js"
+   ]
+  },
+  {
+   "slug": "webassembly",
+   "display_name": "WebAssembly",
+   "family": "frontend",
+   "aliases": [
+    "wasm"
+   ]
+  },
+  {
+   "slug": "accessibility",
+   "display_name": "Accessibility",
+   "family": "frontend",
+   "aliases": [
+    "a11y",
+    "wcag"
+   ]
+  },
+  {
+   "slug": "responsive-design",
+   "display_name": "Responsive Design",
+   "family": "frontend",
+   "aliases": [
+    "responsive web design"
+   ]
+  },
+  {
+   "slug": "nodejs",
+   "display_name": "Node.js",
+   "family": "backend",
+   "aliases": [
+    "node"
+   ]
+  },
+  {
+   "slug": "expressjs",
+   "display_name": "Express",
+   "family": "backend",
+   "aliases": [
+    "express"
+   ]
+  },
+  {
+   "slug": "nestjs",
+   "display_name": "NestJS",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "django",
+   "display_name": "Django",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "flask",
+   "display_name": "Flask",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "fastapi",
+   "display_name": "FastAPI",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "rails",
+   "display_name": "Ruby on Rails",
+   "family": "backend",
+   "aliases": [
+    "rails",
+    "ror",
+    "ruby rails"
+   ]
+  },
+  {
+   "slug": "spring",
+   "display_name": "Spring",
+   "family": "backend",
+   "aliases": [
+    "spring boot",
+    "springboot"
+   ]
+  },
+  {
+   "slug": "laravel",
+   "display_name": "Laravel",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "symfony",
+   "display_name": "Symfony",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "aspdotnet",
+   "display_name": "ASP.NET",
+   "family": "backend",
+   "aliases": [
+    "asp net core",
+    "dotnet core"
+   ]
+  },
+  {
+   "slug": "dotnet",
+   "display_name": ".NET",
+   "family": "backend",
+   "aliases": [
+    "dot net"
+   ]
+  },
+  {
+   "slug": "phoenix",
+   "display_name": "Phoenix",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "graphql",
+   "display_name": "GraphQL",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "rest",
+   "display_name": "REST APIs",
+   "family": "backend",
+   "aliases": [
+    "rest api",
+    "restful",
+    "restful apis",
+    "rest apis",
+    "api design",
+    "apis",
+    "api"
+   ]
+  },
+  {
+   "slug": "grpc",
+   "display_name": "gRPC",
+   "family": "backend",
+   "aliases": []
+  },
+  {
+   "slug": "websockets",
+   "display_name": "WebSockets",
+   "family": "backend",
+   "aliases": [
+    "websocket"
+   ]
+  },
+  {
+   "slug": "microservices",
+   "display_name": "Microservices",
+   "family": "backend",
+   "aliases": [
+    "micro services",
+    "microservice architecture"
+   ]
+  },
+  {
+   "slug": "openapi",
+   "display_name": "OpenAPI",
+   "family": "backend",
+   "aliases": [
+    "swagger"
+   ]
+  },
+  {
+   "slug": "postgresql",
+   "display_name": "PostgreSQL",
+   "family": "database",
+   "aliases": [
+    "postgres",
+    "psql",
+    "pg"
+   ]
+  },
+  {
+   "slug": "mysql",
+   "display_name": "MySQL",
+   "family": "database",
+   "aliases": [
+    "mariadb"
+   ]
+  },
+  {
+   "slug": "mongodb",
+   "display_name": "MongoDB",
+   "family": "database",
+   "aliases": [
+    "mongo"
+   ]
+  },
+  {
+   "slug": "redis",
+   "display_name": "Redis",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "elasticsearch",
+   "display_name": "Elasticsearch",
+   "family": "database",
+   "aliases": [
+    "elastic",
+    "opensearch"
+   ]
+  },
+  {
+   "slug": "cassandra",
+   "display_name": "Cassandra",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "dynamodb",
+   "display_name": "DynamoDB",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "sqlserver",
+   "display_name": "SQL Server",
+   "family": "database",
+   "aliases": [
+    "mssql",
+    "microsoft sql server"
+   ]
+  },
+  {
+   "slug": "oracle-db",
+   "display_name": "Oracle Database",
+   "family": "database",
+   "aliases": [
+    "oracle db"
+   ]
+  },
+  {
+   "slug": "sqlite",
+   "display_name": "SQLite",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "clickhouse",
+   "display_name": "ClickHouse",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "neo4j",
+   "display_name": "Neo4j",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "snowflake",
+   "display_name": "Snowflake",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "bigquery",
+   "display_name": "BigQuery",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "redshift",
+   "display_name": "Redshift",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "pgvector",
+   "display_name": "pgvector",
+   "family": "database",
+   "aliases": []
+  },
+  {
+   "slug": "data-modeling",
+   "display_name": "Data Modeling",
+   "family": "database",
+   "aliases": [
+    "database design",
+    "schema design"
+   ]
+  },
+  {
+   "slug": "aws",
+   "display_name": "AWS",
+   "family": "cloud",
+   "aliases": [
+    "amazon web services",
+    "amazon aws"
+   ]
+  },
+  {
+   "slug": "gcp",
+   "display_name": "Google Cloud",
+   "family": "cloud",
+   "aliases": [
+    "google cloud platform",
+    "gcp cloud"
+   ]
+  },
+  {
+   "slug": "azure",
+   "display_name": "Azure",
+   "family": "cloud",
+   "aliases": [
+    "microsoft azure"
+   ]
+  },
+  {
+   "slug": "kubernetes",
+   "display_name": "Kubernetes",
+   "family": "infrastructure",
+   "aliases": [
+    "k8s",
+    "kubernetes k8s"
+   ]
+  },
+  {
+   "slug": "docker",
+   "display_name": "Docker",
+   "family": "infrastructure",
+   "aliases": [
+    "containers",
+    "containerization"
+   ]
+  },
+  {
+   "slug": "terraform",
+   "display_name": "Terraform",
+   "family": "infrastructure",
+   "aliases": [
+    "hcl"
+   ]
+  },
+  {
+   "slug": "ansible",
+   "display_name": "Ansible",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "helm",
+   "display_name": "Helm",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "pulumi",
+   "display_name": "Pulumi",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "linux",
+   "display_name": "Linux",
+   "family": "infrastructure",
+   "aliases": [
+    "unix",
+    "gnu linux"
+   ]
+  },
+  {
+   "slug": "nginx",
+   "display_name": "Nginx",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "kafka",
+   "display_name": "Kafka",
+   "family": "infrastructure",
+   "aliases": [
+    "apache kafka"
+   ]
+  },
+  {
+   "slug": "rabbitmq",
+   "display_name": "RabbitMQ",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "nats",
+   "display_name": "NATS",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "serverless",
+   "display_name": "Serverless",
+   "family": "infrastructure",
+   "aliases": [
+    "lambda",
+    "aws lambda",
+    "cloud functions"
+   ]
+  },
+  {
+   "slug": "cdn",
+   "display_name": "CDN",
+   "family": "infrastructure",
+   "aliases": [
+    "cloudflare",
+    "content delivery network"
+   ]
+  },
+  {
+   "slug": "istio",
+   "display_name": "Istio",
+   "family": "infrastructure",
+   "aliases": [
+    "service mesh"
+   ]
+  },
+  {
+   "slug": "vault",
+   "display_name": "Vault",
+   "family": "infrastructure",
+   "aliases": [
+    "hashicorp vault"
+   ]
+  },
+  {
+   "slug": "cicd",
+   "display_name": "CI/CD",
+   "family": "devops",
+   "aliases": [
+    "ci cd",
+    "continuous integration",
+    "continuous delivery",
+    "continuous deployment",
+    "ci/cd pipelines",
+    "build pipelines"
+   ]
+  },
+  {
+   "slug": "gitlab-ci",
+   "display_name": "GitLab CI",
+   "family": "devops",
+   "aliases": [
+    "gitlab ci cd"
+   ]
+  },
+  {
+   "slug": "github-actions",
+   "display_name": "GitHub Actions",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "jenkins",
+   "display_name": "Jenkins",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "argocd",
+   "display_name": "Argo CD",
+   "family": "devops",
+   "aliases": [
+    "argo"
+   ]
+  },
+  {
+   "slug": "git",
+   "display_name": "Git",
+   "family": "devops",
+   "aliases": [
+    "version control",
+    "source control",
+    "source code management",
+    "scm"
+   ]
+  },
+  {
+   "slug": "observability",
+   "display_name": "Observability",
+   "family": "devops",
+   "aliases": [
+    "monitoring",
+    "monitoring and alerting",
+    "apm"
+   ]
+  },
+  {
+   "slug": "prometheus",
+   "display_name": "Prometheus",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "grafana",
+   "display_name": "Grafana",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "opentelemetry",
+   "display_name": "OpenTelemetry",
+   "family": "devops",
+   "aliases": [
+    "otel"
+   ]
+  },
+  {
+   "slug": "datadog",
+   "display_name": "Datadog",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "sre",
+   "display_name": "Site Reliability Engineering",
+   "family": "devops",
+   "aliases": [
+    "site reliability",
+    "reliability engineering"
+   ]
+  },
+  {
+   "slug": "incident-response",
+   "display_name": "Incident Response",
+   "family": "devops",
+   "aliases": [
+    "on call",
+    "oncall",
+    "incident management"
+   ]
+  },
+  {
+   "slug": "iac",
+   "display_name": "Infrastructure as Code",
+   "family": "devops",
+   "aliases": [
+    "infrastructure-as-code"
+   ]
+  },
+  {
+   "slug": "devsecops",
+   "display_name": "DevSecOps",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "gitops",
+   "display_name": "GitOps",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "machine-learning",
+   "display_name": "Machine Learning",
+   "family": "ml",
+   "aliases": [
+    "ml",
+    "deep learning"
+   ]
+  },
+  {
+   "slug": "pytorch",
+   "display_name": "PyTorch",
+   "family": "ml",
+   "aliases": [
+    "torch"
+   ]
+  },
+  {
+   "slug": "tensorflow",
+   "display_name": "TensorFlow",
+   "family": "ml",
+   "aliases": []
+  },
+  {
+   "slug": "scikit-learn",
+   "display_name": "scikit-learn",
+   "family": "ml",
+   "aliases": [
+    "sklearn"
+   ]
+  },
+  {
+   "slug": "pandas",
+   "display_name": "pandas",
+   "family": "ml",
+   "aliases": []
+  },
+  {
+   "slug": "numpy",
+   "display_name": "NumPy",
+   "family": "ml",
+   "aliases": []
+  },
+  {
+   "slug": "spark",
+   "display_name": "Apache Spark",
+   "family": "ml",
+   "aliases": [
+    "pyspark",
+    "spark"
+   ]
+  },
+  {
+   "slug": "airflow",
+   "display_name": "Airflow",
+   "family": "ml",
+   "aliases": [
+    "apache airflow"
+   ]
+  },
+  {
+   "slug": "dbt",
+   "display_name": "dbt",
+   "family": "ml",
+   "aliases": [
+    "data build tool"
+   ]
+  },
+  {
+   "slug": "llm",
+   "display_name": "Large Language Models",
+   "family": "ml",
+   "aliases": [
+    "llms",
+    "generative ai",
+    "genai",
+    "gen ai",
+    "ai",
+    "artificial intelligence"
+   ]
+  },
+  {
+   "slug": "nlp",
+   "display_name": "NLP",
+   "family": "ml",
+   "aliases": [
+    "natural language processing"
+   ]
+  },
+  {
+   "slug": "computer-vision",
+   "display_name": "Computer Vision",
+   "family": "ml",
+   "aliases": [
+    "cv"
+   ]
+  },
+  {
+   "slug": "mlops",
+   "display_name": "MLOps",
+   "family": "ml",
+   "aliases": []
+  },
+  {
+   "slug": "rag",
+   "display_name": "Retrieval Augmented Generation",
+   "family": "ml",
+   "aliases": [
+    "retrieval-augmented generation"
+   ]
+  },
+  {
+   "slug": "etl",
+   "display_name": "ETL",
+   "family": "ml",
+   "aliases": [
+    "elt",
+    "data pipelines",
+    "data pipeline"
+   ]
+  },
+  {
+   "slug": "data-warehousing",
+   "display_name": "Data Warehousing",
+   "family": "ml",
+   "aliases": [
+    "data warehouse"
+   ]
+  },
+  {
+   "slug": "statistics",
+   "display_name": "Statistics",
+   "family": "ml",
+   "aliases": [
+    "statistical analysis"
+   ]
+  },
+  {
+   "slug": "recommender-systems",
+   "display_name": "Recommender Systems",
+   "family": "ml",
+   "aliases": [
+    "recommendation systems"
+   ]
+  },
+  {
+   "slug": "security",
+   "display_name": "Security",
+   "family": "security",
+   "aliases": [
+    "information security",
+    "infosec",
+    "cybersecurity"
+   ]
+  },
+  {
+   "slug": "appsec",
+   "display_name": "Application Security",
+   "family": "security",
+   "aliases": [
+    "application security"
+   ]
+  },
+  {
+   "slug": "penetration-testing",
+   "display_name": "Penetration Testing",
+   "family": "security",
+   "aliases": [
+    "pentesting",
+    "pen testing"
+   ]
+  },
+  {
+   "slug": "threat-modeling",
+   "display_name": "Threat Modeling",
+   "family": "security",
+   "aliases": []
+  },
+  {
+   "slug": "cryptography",
+   "display_name": "Cryptography",
+   "family": "security",
+   "aliases": [
+    "encryption"
+   ]
+  },
+  {
+   "slug": "iam",
+   "display_name": "Identity and Access Management",
+   "family": "security",
+   "aliases": [
+    "identity and access management",
+    "sso",
+    "oauth",
+    "oauth2",
+    "openid connect",
+    "oidc",
+    "saml"
+   ]
+  },
+  {
+   "slug": "soc2",
+   "display_name": "SOC 2",
+   "family": "security",
+   "aliases": [
+    "soc2 compliance"
+   ]
+  },
+  {
+   "slug": "gdpr",
+   "display_name": "GDPR",
+   "family": "security",
+   "aliases": [
+    "data privacy",
+    "privacy compliance"
+   ]
+  },
+  {
+   "slug": "pci-dss",
+   "display_name": "PCI DSS",
+   "family": "security",
+   "aliases": [
+    "pci"
+   ]
+  },
+  {
+   "slug": "vulnerability-management",
+   "display_name": "Vulnerability Management",
+   "family": "security",
+   "aliases": []
+  },
+  {
+   "slug": "zero-trust",
+   "display_name": "Zero Trust",
+   "family": "security",
+   "aliases": []
+  },
+  {
+   "slug": "android",
+   "display_name": "Android",
+   "family": "mobile",
+   "aliases": [
+    "android development"
+   ]
+  },
+  {
+   "slug": "ios",
+   "display_name": "iOS",
+   "family": "mobile",
+   "aliases": [
+    "ios development"
+   ]
+  },
+  {
+   "slug": "react-native",
+   "display_name": "React Native",
+   "family": "mobile",
+   "aliases": []
+  },
+  {
+   "slug": "flutter",
+   "display_name": "Flutter",
+   "family": "mobile",
+   "aliases": []
+  },
+  {
+   "slug": "testing",
+   "display_name": "Testing",
+   "family": "qa",
+   "aliases": [
+    "automated testing",
+    "test automation",
+    "qa automation",
+    "unit testing"
+   ]
+  },
+  {
+   "slug": "jest",
+   "display_name": "Jest",
+   "family": "qa",
+   "aliases": []
+  },
+  {
+   "slug": "cypress",
+   "display_name": "Cypress",
+   "family": "qa",
+   "aliases": []
+  },
+  {
+   "slug": "playwright",
+   "display_name": "Playwright",
+   "family": "qa",
+   "aliases": []
+  },
+  {
+   "slug": "selenium",
+   "display_name": "Selenium",
+   "family": "qa",
+   "aliases": []
+  },
+  {
+   "slug": "pytest",
+   "display_name": "pytest",
+   "family": "qa",
+   "aliases": []
+  },
+  {
+   "slug": "tdd",
+   "display_name": "Test Driven Development",
+   "family": "qa",
+   "aliases": [
+    "test-driven development"
+   ]
+  },
+  {
+   "slug": "performance-testing",
+   "display_name": "Performance Testing",
+   "family": "qa",
+   "aliases": [
+    "load testing"
+   ]
+  },
+  {
+   "slug": "agile",
+   "display_name": "Agile",
+   "family": "practice",
+   "aliases": [
+    "agile methodologies",
+    "scrum",
+    "kanban",
+    "agile planning"
+   ]
+  },
+  {
+   "slug": "code-review",
+   "display_name": "Code Review",
+   "family": "practice",
+   "aliases": [
+    "peer review"
+   ]
+  },
+  {
+   "slug": "technical-writing",
+   "display_name": "Technical Writing",
+   "family": "practice",
+   "aliases": [
+    "documentation",
+    "technical documentation"
+   ]
+  },
+  {
+   "slug": "system-design",
+   "display_name": "System Design",
+   "family": "practice",
+   "aliases": [
+    "distributed systems",
+    "software architecture",
+    "architecture"
+   ]
+  },
+  {
+   "slug": "mentoring",
+   "display_name": "Mentoring",
+   "family": "practice",
+   "aliases": [
+    "coaching",
+    "mentorship"
+   ]
+  },
+  {
+   "slug": "stakeholder-management",
+   "display_name": "Stakeholder Management",
+   "family": "practice",
+   "aliases": [
+    "stakeholder communication"
+   ]
+  },
+  {
+   "slug": "product-management",
+   "display_name": "Product Management",
+   "family": "product",
+   "aliases": [
+    "product strategy",
+    "product ownership"
+   ]
+  },
+  {
+   "slug": "roadmapping",
+   "display_name": "Roadmapping",
+   "family": "product",
+   "aliases": [
+    "product roadmap"
+   ]
+  },
+  {
+   "slug": "user-research",
+   "display_name": "User Research",
+   "family": "product",
+   "aliases": [
+    "ux research",
+    "usability testing"
+   ]
+  },
+  {
+   "slug": "figma",
+   "display_name": "Figma",
+   "family": "design",
+   "aliases": []
+  },
+  {
+   "slug": "design-systems",
+   "display_name": "Design Systems",
+   "family": "design",
+   "aliases": []
+  },
+  {
+   "slug": "ui-design",
+   "display_name": "UI Design",
+   "family": "design",
+   "aliases": [
+    "user interface design",
+    "visual design"
+   ]
+  },
+  {
+   "slug": "ux-design",
+   "display_name": "UX Design",
+   "family": "design",
+   "aliases": [
+    "user experience design",
+    "ux"
+   ]
+  },
+  {
+   "slug": "prototyping",
+   "display_name": "Prototyping",
+   "family": "design",
+   "aliases": []
+  },
+  {
+   "slug": "analytics",
+   "display_name": "Analytics",
+   "family": "product",
+   "aliases": [
+    "product analytics",
+    "data analysis",
+    "amplitude",
+    "mixpanel"
+   ]
+  },
+  {
+   "slug": "ab-testing",
+   "display_name": "A/B Testing",
+   "family": "product",
+   "aliases": [
+    "experimentation",
+    "split testing"
+   ]
+  },
+  {
+   "slug": "salesforce",
+   "display_name": "Salesforce",
+   "family": "gtm",
+   "aliases": [
+    "sfdc"
+   ]
+  },
+  {
+   "slug": "crm",
+   "display_name": "CRM",
+   "family": "gtm",
+   "aliases": [
+    "customer relationship management",
+    "hubspot"
+   ]
+  },
+  {
+   "slug": "saas-sales",
+   "display_name": "SaaS Sales",
+   "family": "gtm",
+   "aliases": [
+    "enterprise sales",
+    "b2b sales",
+    "solution selling"
+   ]
+  },
+  {
+   "slug": "account-management",
+   "display_name": "Account Management",
+   "family": "gtm",
+   "aliases": [
+    "customer success",
+    "account executive"
+   ]
+  },
+  {
+   "slug": "partner-management",
+   "display_name": "Partner Management",
+   "family": "gtm",
+   "aliases": [
+    "channel partnerships",
+    "strategic partnerships",
+    "alliances"
+   ]
+  },
+  {
+   "slug": "public-sector-sales",
+   "display_name": "Public Sector Sales",
+   "family": "gtm",
+   "aliases": [
+    "government sales",
+    "gsa schedules",
+    "federal sales"
+   ]
+  },
+  {
+   "slug": "customer-support",
+   "display_name": "Customer Support",
+   "family": "gtm",
+   "aliases": [
+    "technical support",
+    "customer service"
+   ]
+  },
+  {
+   "slug": "marketing-automation",
+   "display_name": "Marketing Automation",
+   "family": "gtm",
+   "aliases": [
+    "marketo",
+    "marketing automation tools"
+   ]
+  },
+  {
+   "slug": "demand-generation",
+   "display_name": "Demand Generation",
+   "family": "gtm",
+   "aliases": [
+    "demand gen",
+    "lead generation"
+   ]
+  },
+  {
+   "slug": "recruiting",
+   "display_name": "Recruiting",
+   "family": "people",
+   "aliases": [
+    "talent acquisition",
+    "technical recruiting",
+    "sourcing"
+   ]
+  },
+  {
+   "slug": "people-management",
+   "display_name": "People Management",
+   "family": "people",
+   "aliases": [
+    "team leadership",
+    "engineering management",
+    "line management"
+   ]
+  },
+  {
+   "slug": "hiring",
+   "display_name": "Hiring",
+   "family": "people",
+   "aliases": [
+    "interviewing"
+   ]
+  },
+  {
+   "slug": "localization",
+   "display_name": "Localization",
+   "family": "practice",
+   "aliases": [
+    "i18n",
+    "internationalization",
+    "l10n"
+   ]
+  },
+  {
+   "slug": "spanish",
+   "display_name": "Spanish",
+   "family": "language-human",
+   "aliases": []
+  },
+  {
+   "slug": "portuguese",
+   "display_name": "Portuguese",
+   "family": "language-human",
+   "aliases": []
+  },
+  {
+   "slug": "french",
+   "display_name": "French",
+   "family": "language-human",
+   "aliases": []
+  },
+  {
+   "slug": "german",
+   "display_name": "German",
+   "family": "language-human",
+   "aliases": []
+  },
+  {
+   "slug": "japanese",
+   "display_name": "Japanese",
+   "family": "language-human",
+   "aliases": []
+  },
+  {
+   "slug": "mandarin",
+   "display_name": "Mandarin",
+   "family": "language-human",
+   "aliases": [
+    "chinese"
+   ]
+  },
+  {
+   "slug": "payments",
+   "display_name": "Payments",
+   "family": "domain",
+   "aliases": [
+    "payment processing",
+    "payment systems"
+   ]
+  },
+  {
+   "slug": "card-schemes",
+   "display_name": "Card Schemes",
+   "family": "domain",
+   "aliases": [
+    "visa",
+    "mastercard",
+    "card networks",
+    "interchange"
+   ]
+  },
+  {
+   "slug": "acquiring",
+   "display_name": "Acquiring",
+   "family": "domain",
+   "aliases": [
+    "merchant acquiring",
+    "payment acquiring"
+   ]
+  },
+  {
+   "slug": "fintech",
+   "display_name": "Fintech",
+   "family": "domain",
+   "aliases": [
+    "financial technology"
+   ]
+  },
+  {
+   "slug": "fraud-prevention",
+   "display_name": "Fraud Prevention",
+   "family": "domain",
+   "aliases": [
+    "fraud detection",
+    "risk management"
+   ]
+  },
+  {
+   "slug": "kyc",
+   "display_name": "KYC",
+   "family": "domain",
+   "aliases": [
+    "know your customer",
+    "aml",
+    "anti money laundering"
+   ]
+  },
+  {
+   "slug": "gitlab",
+   "display_name": "GitLab",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "github",
+   "display_name": "GitHub",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "bitbucket",
+   "display_name": "Bitbucket",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "jira",
+   "display_name": "Jira",
+   "family": "practice",
+   "aliases": [
+    "atlassian jira"
+   ]
+  },
+  {
+   "slug": "confluence",
+   "display_name": "Confluence",
+   "family": "practice",
+   "aliases": []
+  },
+  {
+   "slug": "slack",
+   "display_name": "Slack",
+   "family": "practice",
+   "aliases": []
+  },
+  {
+   "slug": "linear",
+   "display_name": "Linear",
+   "family": "practice",
+   "aliases": []
+  },
+  {
+   "slug": "notion",
+   "display_name": "Notion",
+   "family": "practice",
+   "aliases": []
+  },
+  {
+   "slug": "zendesk",
+   "display_name": "Zendesk",
+   "family": "gtm",
+   "aliases": []
+  },
+  {
+   "slug": "langchain",
+   "display_name": "LangChain",
+   "family": "ml",
+   "aliases": [
+    "langgraph",
+    "langsmith"
+   ]
+  },
+  {
+   "slug": "openai-api",
+   "display_name": "OpenAI API",
+   "family": "ml",
+   "aliases": [
+    "gpt api",
+    "openai apis"
+   ]
+  },
+  {
+   "slug": "anthropic-api",
+   "display_name": "Anthropic API",
+   "family": "ml",
+   "aliases": [
+    "claude api"
+   ]
+  },
+  {
+   "slug": "vector-databases",
+   "display_name": "Vector Databases",
+   "family": "ml",
+   "aliases": [
+    "vector database",
+    "pinecone",
+    "weaviate",
+    "qdrant",
+    "embeddings"
+   ]
+  },
+  {
+   "slug": "ai-agents",
+   "display_name": "AI Agents",
+   "family": "ml",
+   "aliases": [
+    "agentic workflows",
+    "agentic ai",
+    "ai agent",
+    "autonomous agents"
+   ]
+  },
+  {
+   "slug": "prompt-engineering",
+   "display_name": "Prompt Engineering",
+   "family": "ml",
+   "aliases": [
+    "prompting"
+   ]
+  },
+  {
+   "slug": "terraform-cloud",
+   "display_name": "Terraform Cloud",
+   "family": "infrastructure",
+   "aliases": []
+  },
+  {
+   "slug": "apache",
+   "display_name": "Apache HTTP Server",
+   "family": "infrastructure",
+   "aliases": [
+    "apache2",
+    "httpd"
+   ]
+  },
+  {
+   "slug": "graphql-federation",
+   "display_name": "GraphQL Federation",
+   "family": "backend",
+   "aliases": [
+    "apollo federation"
+   ]
+  },
+  {
+   "slug": "caching",
+   "display_name": "Caching",
+   "family": "backend",
+   "aliases": [
+    "memcached",
+    "cache invalidation"
+   ]
+  },
+  {
+   "slug": "message-queues",
+   "display_name": "Message Queues",
+   "family": "infrastructure",
+   "aliases": [
+    "sqs",
+    "pub sub",
+    "pubsub",
+    "message brokers"
+   ]
+  },
+  {
+   "slug": "web-performance",
+   "display_name": "Web Performance",
+   "family": "frontend",
+   "aliases": [
+    "core web vitals",
+    "lighthouse"
+   ]
+  },
+  {
+   "slug": "seo",
+   "display_name": "SEO",
+   "family": "gtm",
+   "aliases": [
+    "search engine optimization"
+   ]
+  },
+  {
+   "slug": "technical-presales",
+   "display_name": "Technical Pre-sales",
+   "family": "gtm",
+   "aliases": [
+    "solutions engineering",
+    "sales engineering",
+    "presales",
+    "solution architecture"
+   ]
+  },
+  {
+   "slug": "enablement",
+   "display_name": "Enablement",
+   "family": "gtm",
+   "aliases": [
+    "sales enablement",
+    "partner enablement"
+   ]
+  },
+  {
+   "slug": "channel-sales",
+   "display_name": "Channel Sales",
+   "family": "gtm",
+   "aliases": [
+    "channel and alliances",
+    "reseller",
+    "distributor management"
+   ]
+  },
+  {
+   "slug": "forecasting",
+   "display_name": "Forecasting",
+   "family": "gtm",
+   "aliases": [
+    "pipeline management",
+    "sales forecasting"
+   ]
+  },
+  {
+   "slug": "negotiation",
+   "display_name": "Negotiation",
+   "family": "practice",
+   "aliases": [
+    "contract negotiation"
+   ]
+  },
+  {
+   "slug": "public-speaking",
+   "display_name": "Public Speaking",
+   "family": "practice",
+   "aliases": [
+    "presenting",
+    "conference speaking",
+    "developer advocacy",
+    "devrel",
+    "developer relations"
+   ]
+  },
+  {
+   "slug": "content-creation",
+   "display_name": "Content Creation",
+   "family": "gtm",
+   "aliases": [
+    "blogging",
+    "video production",
+    "technical content"
+   ]
+  },
+  {
+   "slug": "community-management",
+   "display_name": "Community Management",
+   "family": "gtm",
+   "aliases": [
+    "community building"
+   ]
+  },
+  {
+   "slug": "saas",
+   "display_name": "SaaS",
+   "family": "domain",
+   "aliases": [
+    "software as a service"
+   ]
+  },
+  {
+   "slug": "open-source",
+   "display_name": "Open Source",
+   "family": "practice",
+   "aliases": [
+    "oss",
+    "open source contribution"
+   ]
+  },
+  {
+   "slug": "api-integration",
+   "display_name": "API Integration",
+   "family": "backend",
+   "aliases": [
+    "third party integrations",
+    "integrations"
+   ]
+  },
+  {
+   "slug": "troubleshooting",
+   "display_name": "Troubleshooting",
+   "family": "practice",
+   "aliases": [
+    "debugging",
+    "root cause analysis",
+    "problem solving"
+   ]
+  },
+  {
+   "slug": "git-internals",
+   "display_name": "Git Internals",
+   "family": "devops",
+   "aliases": []
+  },
+  {
+   "slug": "networking",
+   "display_name": "Networking",
+   "family": "infrastructure",
+   "aliases": [
+    "tcp ip",
+    "dns",
+    "load balancing",
+    "http"
+   ]
+  },
+  {
+   "slug": "compliance",
+   "display_name": "Compliance",
+   "family": "security",
+   "aliases": [
+    "regulatory compliance",
+    "audit"
+   ]
+  },
+  {
+   "slug": "project-management",
+   "display_name": "Project Management",
+   "family": "practice",
+   "aliases": [
+    "program management",
+    "pmp"
+   ]
+  },
+  {
+   "slug": "budgeting",
+   "display_name": "Budgeting",
+   "family": "practice",
+   "aliases": [
+    "financial planning",
+    "p&l"
+   ]
+  },
+  {
+   "slug": "saml-scim",
+   "display_name": "SCIM",
+   "family": "security",
+   "aliases": [
+    "user provisioning"
+   ]
+  },
+  {
+   "slug": "devops",
+   "display_name": "DevOps",
+   "family": "devops",
+   "aliases": [
+    "dev ops",
+    "devops practices"
+   ]
+  },
+  {
+   "slug": "cloud",
+   "display_name": "Cloud Computing",
+   "family": "cloud",
+   "aliases": [
+    "cloud",
+    "cloud platforms",
+    "cloud native",
+    "cloud-native"
+   ]
+  },
+  {
+   "slug": "alm",
+   "display_name": "Application Lifecycle Management",
+   "family": "practice",
+   "aliases": [
+    "software development lifecycle",
+    "sdlc"
+   ]
+  },
+  {
+   "slug": "developer-tools",
+   "display_name": "Developer Tooling",
+   "family": "devops",
+   "aliases": [
+    "developer tools",
+    "software development tools",
+    "dev tooling",
+    "developer experience",
+    "devex",
+    "dx"
+   ]
+  },
+  {
+   "slug": "solution-design",
+   "display_name": "Solution Design",
+   "family": "practice",
+   "aliases": [
+    "solutioning",
+    "technical design"
+   ]
+  },
+  {
+   "slug": "collaboration-tools",
+   "display_name": "Collaboration Platforms",
+   "family": "practice",
+   "aliases": [
+    "collaboration platforms",
+    "collaboration tools"
+   ]
+  },
+  {
+   "slug": "english",
+   "display_name": "English",
+   "family": "language-human",
+   "aliases": [
+    "business english",
+    "fluent english"
+   ]
+  },
+  {
+   "slug": "training",
+   "display_name": "Training",
+   "family": "practice",
+   "aliases": [
+    "workshops",
+    "technical training",
+    "enablement workshops"
+   ]
+  },
+  {
+   "slug": "finance",
+   "display_name": "Finance",
+   "family": "domain",
+   "aliases": [
+    "financial services",
+    "accounting"
+   ]
+  },
+  {
+   "slug": "auditing",
+   "display_name": "Auditing",
+   "family": "security",
+   "aliases": [
+    "audits",
+    "internal audit"
+   ]
+  },
+  {
+   "slug": "platform-engineering",
+   "display_name": "Platform Engineering",
+   "family": "devops",
+   "aliases": [
+    "internal platforms",
+    "platform teams"
+   ]
+  },
+  {
+   "slug": "api-gateway",
+   "display_name": "API Gateway",
+   "family": "backend",
+   "aliases": [
+    "kong",
+    "apigee"
+   ]
+  },
+  {
+   "slug": "saas-metrics",
+   "display_name": "SaaS Metrics",
+   "family": "product",
+   "aliases": [
+    "arr",
+    "mrr",
+    "churn analysis"
+   ]
+  },
+  {
+   "slug": "technical-account-management",
+   "display_name": "Technical Account Management",
+   "family": "gtm",
+   "aliases": [
+    "tam"
+   ]
+  },
+  {
+   "slug": "escalation-management",
+   "display_name": "Escalation Management",
+   "family": "gtm",
+   "aliases": [
+    "escalations"
+   ]
+  },
+  {
+   "slug": "scripting",
+   "display_name": "Scripting",
+   "family": "language",
+   "aliases": [
+    "scripting languages"
+   ]
+  },
+  {
+   "slug": "virtualization",
+   "display_name": "Virtualization",
+   "family": "infrastructure",
+   "aliases": [
+    "vmware",
+    "hypervisor"
+   ]
+  },
+  {
+   "slug": "ci-runners",
+   "display_name": "CI Runners",
+   "family": "devops",
+   "aliases": [
+    "gitlab runner",
+    "build agents"
+   ]
+  },
+  {
+   "slug": "code-quality",
+   "display_name": "Code Quality",
+   "family": "practice",
+   "aliases": [
+    "static analysis",
+    "linting",
+    "sonarqube"
+   ]
+  },
+  {
+   "slug": "release-management",
+   "display_name": "Release Management",
+   "family": "devops",
+   "aliases": [
+    "release engineering",
+    "versioning"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "typescript",
+   "to": "javascript",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "react",
+   "to": "javascript",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "nextjs",
+   "to": "react",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "remix",
+   "to": "react",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "nuxtjs",
+   "to": "vuejs",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "react-native",
+   "to": "react",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "expressjs",
+   "to": "nodejs",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "nestjs",
+   "to": "nodejs",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "rails",
+   "to": "ruby",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "django",
+   "to": "python",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "flask",
+   "to": "python",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "fastapi",
+   "to": "python",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "spring",
+   "to": "java",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "laravel",
+   "to": "php",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "aspdotnet",
+   "to": "csharp",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "phoenix",
+   "to": "elixir",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "spark",
+   "to": "python",
+   "relation": "related"
+  },
+  {
+   "from": "pandas",
+   "to": "python",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "numpy",
+   "to": "python",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "pytorch",
+   "to": "machine-learning",
+   "relation": "related"
+  },
+  {
+   "from": "tensorflow",
+   "to": "machine-learning",
+   "relation": "related"
+  },
+  {
+   "from": "rag",
+   "to": "llm",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "helm",
+   "to": "kubernetes",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "istio",
+   "to": "kubernetes",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "argocd",
+   "to": "kubernetes",
+   "relation": "related"
+  },
+  {
+   "from": "gitops",
+   "to": "cicd",
+   "relation": "related"
+  },
+  {
+   "from": "kubernetes",
+   "to": "docker",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "terraform",
+   "to": "iac",
+   "relation": "related"
+  },
+  {
+   "from": "ansible",
+   "to": "iac",
+   "relation": "related"
+  },
+  {
+   "from": "prometheus",
+   "to": "observability",
+   "relation": "related"
+  },
+  {
+   "from": "grafana",
+   "to": "observability",
+   "relation": "related"
+  },
+  {
+   "from": "opentelemetry",
+   "to": "observability",
+   "relation": "related"
+  },
+  {
+   "from": "datadog",
+   "to": "observability",
+   "relation": "related"
+  },
+  {
+   "from": "sre",
+   "to": "observability",
+   "relation": "related"
+  },
+  {
+   "from": "gitlab-ci",
+   "to": "cicd",
+   "relation": "related"
+  },
+  {
+   "from": "github-actions",
+   "to": "cicd",
+   "relation": "related"
+  },
+  {
+   "from": "jenkins",
+   "to": "cicd",
+   "relation": "related"
+  },
+  {
+   "from": "pgvector",
+   "to": "postgresql",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "jest",
+   "to": "testing",
+   "relation": "related"
+  },
+  {
+   "from": "cypress",
+   "to": "testing",
+   "relation": "related"
+  },
+  {
+   "from": "playwright",
+   "to": "testing",
+   "relation": "related"
+  },
+  {
+   "from": "selenium",
+   "to": "testing",
+   "relation": "related"
+  },
+  {
+   "from": "pytest",
+   "to": "testing",
+   "relation": "related"
+  },
+  {
+   "from": "tdd",
+   "to": "testing",
+   "relation": "related"
+  },
+  {
+   "from": "appsec",
+   "to": "security",
+   "relation": "related"
+  },
+  {
+   "from": "penetration-testing",
+   "to": "security",
+   "relation": "related"
+  },
+  {
+   "from": "threat-modeling",
+   "to": "security",
+   "relation": "related"
+  },
+  {
+   "from": "devsecops",
+   "to": "security",
+   "relation": "related"
+  },
+  {
+   "from": "sass",
+   "to": "css",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "tailwindcss",
+   "to": "css",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "elasticsearch",
+   "to": "sql",
+   "relation": "related"
+  },
+  {
+   "from": "card-schemes",
+   "to": "payments",
+   "relation": "related"
+  },
+  {
+   "from": "acquiring",
+   "to": "payments",
+   "relation": "related"
+  },
+  {
+   "from": "kyc",
+   "to": "fintech",
+   "relation": "related"
+  },
+  {
+   "from": "fraud-prevention",
+   "to": "payments",
+   "relation": "related"
+  },
+  {
+   "from": "vuejs",
+   "to": "javascript",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "angular",
+   "to": "typescript",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "svelte",
+   "to": "javascript",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "kotlin",
+   "to": "java",
+   "relation": "related"
+  },
+  {
+   "from": "android",
+   "to": "kotlin",
+   "relation": "related"
+  },
+  {
+   "from": "ios",
+   "to": "swift",
+   "relation": "related"
+  },
+  {
+   "from": "flutter",
+   "to": "dart",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "gitlab",
+   "to": "git",
+   "relation": "related"
+  },
+  {
+   "from": "github",
+   "to": "git",
+   "relation": "related"
+  },
+  {
+   "from": "langchain",
+   "to": "llm",
+   "relation": "related"
+  },
+  {
+   "from": "ai-agents",
+   "to": "llm",
+   "relation": "related"
+  },
+  {
+   "from": "prompt-engineering",
+   "to": "llm",
+   "relation": "related"
+  },
+  {
+   "from": "vector-databases",
+   "to": "rag",
+   "relation": "related"
+  },
+  {
+   "from": "openai-api",
+   "to": "llm",
+   "relation": "related"
+  },
+  {
+   "from": "anthropic-api",
+   "to": "llm",
+   "relation": "related"
+  },
+  {
+   "from": "channel-sales",
+   "to": "partner-management",
+   "relation": "related"
+  },
+  {
+   "from": "technical-presales",
+   "to": "saas-sales",
+   "relation": "related"
+  },
+  {
+   "from": "git-internals",
+   "to": "git",
+   "relation": "prerequisite"
+  },
+  {
+   "from": "devsecops",
+   "to": "devops",
+   "relation": "related"
+  },
+  {
+   "from": "gitops",
+   "to": "devops",
+   "relation": "related"
+  },
+  {
+   "from": "aws",
+   "to": "cloud",
+   "relation": "related"
+  },
+  {
+   "from": "gcp",
+   "to": "cloud",
+   "relation": "related"
+  },
+  {
+   "from": "azure",
+   "to": "cloud",
+   "relation": "related"
+  },
+  {
+   "from": "platform-engineering",
+   "to": "devops",
+   "relation": "related"
+  },
+  {
+   "from": "ci-runners",
+   "to": "cicd",
+   "relation": "related"
+  },
+  {
+   "from": "release-management",
+   "to": "cicd",
+   "relation": "related"
+  }
+ ]
+}

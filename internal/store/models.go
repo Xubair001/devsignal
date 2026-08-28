@@ -382,19 +382,31 @@ type RefreshToken struct {
 }
 
 type Resume struct {
-	ID            pgtype.UUID
-	UserID        pgtype.UUID
-	ObjectKey     string
-	TextObjectKey *string
-	Filename      *string
-	ContentType   *string
-	SizeBytes     int64
-	Sha256        []byte
-	TextChars     *int32
-	ParseState    string
-	ParseError    *string
-	UploadedAt    pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
+	ID                     pgtype.UUID
+	UserID                 pgtype.UUID
+	ObjectKey              string
+	TextObjectKey          *string
+	Filename               *string
+	ContentType            *string
+	SizeBytes              int64
+	Sha256                 []byte
+	TextChars              *int32
+	ParseState             string
+	ParseError             *string
+	UploadedAt             pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	SkillsExtractedAt      pgtype.Timestamptz
+	SkillsModelID          *string
+	SkillsPromptVersion    *string
+	SkillsSchemaVersion    *string
+	SkillsRedactionVersion *string
+	SkillsFieldSet         *string
+	SkillsRedactedChars    *int32
+	SkillsSentChars        *int32
+	SkillsFound            *int32
+	SkillsResolved         *int32
+	SkillsYearsClaimed     *int16
+	SkillsSeniorityClaimed *string
 }
 
 type Skill struct {

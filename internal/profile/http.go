@@ -74,6 +74,16 @@ type profileRequest struct {
 	SalaryCurrency        *string           `json:"salary_currency"`
 	SalaryPeriod          *string           `json:"salary_period"`
 	WorkAuthorization     map[string]string `json:"work_authorization"`
+	// Skills is absent when the caller is not editing skills, and [] when they
+	// are clearing them. A profile form PUT without this field must not wipe the
+	// user's skills, so nil and empty cannot be conflated.
+	Skills []skillInput `json:"skills"`
+}
+
+type skillInput struct {
+	Name        string `json:"name"`
+	Proficiency *int16 `json:"proficiency"`
+	Years       *int16 `json:"years"`
 }
 
 type skillResponse struct {
@@ -100,6 +110,13 @@ type profileResponse struct {
 	// ProfileVersion is surfaced so a client can tell whether a cached fit score
 	// it holds is still current.
 	ProfileVersion int32 `json:"profile_version"`
+	// UnresolvedSkills names the skills we could not place in the ontology.
+	//
+	// Returned rather than dropped: the profile deliberately cannot mint new
+	// skills, so a name we do not recognise counts toward nothing. Telling the
+	// user is the difference between a typo they can fix and a skill that
+	// silently never matches anything.
+	UnresolvedSkills []string `json:"unresolved_skills,omitempty"`
 }
 
 type money struct {
@@ -179,10 +196,30 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		in.WorkAuthorization = raw
 	}
 
+	if req.Skills != nil {
+		in.Skills = make([]SkillInput, 0, len(req.Skills))
+		for _, sk := range req.Skills {
+			in.Skills = append(in.Skills, SkillInput(sk))
+		}
+	}
+
 	p, err := h.svc.Save(r.Context(), id.UserID, id.TenantID, in)
 	if err != nil {
 		h.fail(w, r, err)
 		return
+	}
+
+	// Skills after the profile row exists, and only when the caller sent the
+	// field: a form PUT that omits skills is editing preferences, not clearing
+	// someone's skill list.
+	var unresolved []string
+	if req.Skills != nil {
+		res, serr := h.svc.SaveSkills(r.Context(), id.UserID, in.Skills)
+		if serr != nil {
+			h.fail(w, r, serr)
+			return
+		}
+		unresolved = res.Unresolved
 	}
 	// The vector is derived data. A failure here degrades match quality until the
 	// next edit or backfill; it is not a reason to tell the user their own
@@ -195,7 +232,9 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, skills, _ := h.svc.Get(r.Context(), id.UserID)
-	writeJSON(w, http.StatusOK, toProfileResponse(p, skills))
+	resp := toProfileResponse(p, skills)
+	resp.UnresolvedSkills = unresolved
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) uploadResume(w http.ResponseWriter, r *http.Request) {

@@ -1,12 +1,20 @@
 import { http } from './client';
 import type {
+  ChoicesResponse,
   DismissReason,
   ExcludedResponse,
   FeedResponse,
   FitView,
+  SkillGaps,
 } from './types';
 
 export const feedApi = {
+  /** Question four. Counts of postings, never a probability. */
+  gaps: () => http.get<SkillGaps>('/api/v1/feed/gaps'),
+
+  /** The closed set of dismissal reasons, from the server that owns it. */
+  dismissReasons: () => http.get<ChoicesResponse>('/api/v1/engagement/dismiss-reasons'),
+
   list: (limit = 7) => http.get<FeedResponse>(`/api/v1/feed?limit=${limit}`),
   excluded: () => http.get<ExcludedResponse>('/api/v1/feed/excluded'),
   explanation: (id: string) => http.get<FitView>(`/api/v1/feed/${id}/explanation`),

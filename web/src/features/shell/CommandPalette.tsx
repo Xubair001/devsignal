@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/Toast';
-import { NAV } from './nav';
+import { navFor } from './nav';
+import { useSession } from '@/features/auth/useSession';
 
 type Command = { label: string; hint?: string; run: () => void };
 
@@ -14,14 +15,20 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { isAdmin } = useSession();
 
   const commands = useMemo<Command[]>(
     () => [
-      ...NAV.map((n) => ({
-        label: `Go to ${n.label}`,
-        hint: 'page',
-        run: () => nav(n.to),
-      })),
+      /* Filtered by role from the same source as the sidebar. Three lists that
+         each decide what exists is how a"hidden" destination stays reachable
+         from one of them. */
+      ...navFor(isAdmin)
+        .flatMap((g) => g.items)
+        .map((n) => ({
+          label: `Go to ${n.label}`,
+          hint: 'page',
+          run: () => nav(n.to),
+        })),
       {
         label: 'Refresh every panel',
         hint: 'data',
@@ -36,7 +43,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         run: () => document.querySelector<HTMLButtonElement>('[data-theme-toggle]')?.click(),
       },
     ],
-    [nav, qc, toast],
+    [nav, qc, toast, isAdmin],
   );
 
   const shown = useMemo(() => {
@@ -99,16 +106,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           placeholder="Jump to a page or run an action…"
           autoComplete="off"
           spellCheck={false}
-          className="flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-3"
+          className="flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
         />
-        <kbd className="rounded-[5px] border border-line bg-raised px-1.5 py-0.5 text-[11px] font-medium text-ink-3">
+        <kbd className="rounded-[5px] border border-line bg-raised px-1.5 py-0.5 text-label font-medium text-ink-3">
           ESC
         </kbd>
       </div>
 
       <div ref={listRef} role="listbox" aria-label="Results" className="max-h-[min(52vh,400px)] overflow-y-auto p-1.5">
         {shown.length === 0 ? (
-          <p className="px-4 py-7 text-center text-[13px] text-ink-3">Nothing matches that.</p>
+          <p className="px-4 py-7 text-center text-body text-ink-3">Nothing matches that.</p>
         ) : (
           shown.map((c, i) => (
             <button
@@ -118,11 +125,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               data-active={i === active}
               onMouseEnter={() => setActive(i)}
               onClick={() => run(i)}
-              className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13.5px] text-ink-2 transition-colors data-[active=true]:bg-brand-wash data-[active=true]:text-ink"
+              className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-body text-ink-2 transition-colors data-[active=true]:bg-brand-wash data-[active=true]:text-ink"
             >
               <span className="flex-1">{c.label}</span>
               {c.hint && (
-                <kbd className="rounded-[5px] border border-line bg-raised px-1.5 py-0.5 text-[10.5px] font-medium text-ink-3">
+                <kbd className="rounded-[5px] border border-line bg-raised px-1.5 py-0.5 text-micro font-medium text-ink-3">
                   {c.hint}
                 </kbd>
               )}
