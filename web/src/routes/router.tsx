@@ -12,6 +12,7 @@ import { ProfilePage } from '@/features/profile/ProfilePage';
 import { BrowsePage } from '@/features/browse/BrowsePage';
 import { OpportunityPage } from '@/features/browse/OpportunityPage';
 import { SavedPage } from '@/features/saved/SavedPage';
+import { GapsPage } from '@/features/gaps/GapsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { MergeQueuePage } from '@/features/admin/MergeQueuePage';
 import { NotFound } from '@/components/ui/States';
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/app/feed" replace /> },
           { path: 'feed', element: <FeedPage /> },
           { path: 'saved', element: <SavedPage /> },
+          { path: 'gaps', element: <GapsPage /> },
           { path: 'browse', element: <BrowsePage /> },
           { path: 'browse/:id', element: <OpportunityPage /> },
           { path: 'profile', element: <ProfilePage /> },

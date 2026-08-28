@@ -464,3 +464,39 @@ export type PurgePlan = {
   also_seen_elsewhere: number;
   merged: number;
 };
+
+/* ------------------------------------------------------------ skill gaps --- */
+
+export type SkillGap = {
+  slug: string;
+  name: string;
+  /** A COUNT OF POSTINGS. Never divide it into a percentage. */
+  required_by: number;
+  preferred_by: number;
+};
+
+export type SkillStrength = { name: string; required_by: number };
+
+/**
+ * Question four: what should I learn to be more competitive.
+ *
+ * Every number is a count of postings. There is deliberately no competitiveness
+ * estimate and no probability — we have no applicant counts, and one invented
+ * figure would discredit the honest ones beside it. The client renders these as
+ * counts and must not derive a percentage from them.
+ */
+export type SkillGaps = {
+  /**
+   * The two empty cases look identical and have OPPOSITE fixes, so the server
+   * names which one it is rather than leaving the client to guess from a zero:
+   *   stale                    the gate has not run since the profile changed
+   *   insufficient_extraction  it ran, but too few of those roles could be read
+   */
+  state: 'ready' | 'stale' | 'insufficient_extraction';
+  gaps: SkillGap[];
+  strengths: SkillStrength[];
+  /** The denominator. Without it every count above is unreadable. */
+  eligible: number;
+  with_skills: number;
+  excluded_unknown_phrases: number;
+};

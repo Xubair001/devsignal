@@ -104,6 +104,26 @@ Against the real corpus the digest correctly sends **nothing**: 188 roles are el
 reach "Strong fit", because coverage sits under 60% without extraction. That is the feature working
 — see hard rule 28.
 
+**Question four is partly answered.** `--role=gaps --user=<id>` and `/app/gaps` report which skills
+a user's ELIGIBLE roles require that they have not listed, ranked by how many roles ask. Counts of
+postings only — there is no competitiveness figure, because we have no applicant counts and one
+invented number would discredit the honest ones beside it. A gap is deliberately **not** a scoring
+factor: the required-skills factor already scores what a person matches, and counting it again would
+double-count.
+
+Two things it has to get right about `eligibility_result`, both of which it got wrong first: the
+table is keyed per (profile_version, opportunity_version) so counting rows counted 502 "roles"
+against a 265-posting corpus; and a result computed against an older profile describes a gate the
+user no longer has. Every count is over DISTINCT opportunities at the CURRENT profile version.
+
+The two empty states are named by the server (`stale` vs `insufficient_extraction`) because they look
+identical and have opposite fixes — one needs the feed re-run, the other needs extraction. Reporting
+the wrong one is worse advice than none. The 60% coverage bar is the same constant the fit model uses,
+asserted by a test so the two cannot drift.
+
+What it does NOT answer is the trend: demand over time needs history that cannot be backfilled, and
+`skill_demand_daily` has one day.
+
 Next: step 22 (calibration) needs outcome data the engagement log is now collecting. Step 26
 (market intelligence) is blocked on a demand-series writer that **does not exist** — see
 [docs/FRONTEND-PLAN.md](docs/FRONTEND-PLAN.md).

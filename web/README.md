@@ -70,7 +70,14 @@ mint new skills — a typo would become a vocabulary entry that then matches no 
 explanation. Silently dropping one would leave the user believing a skill counts when it counts
 toward nothing.
 
-**7. The posting body is rendered as HTML, and that is only safe because the server filters it.**
+**7. A gap is a count of postings, never a chance.** `/app/gaps` answers "what should I learn",
+which is precisely where a competitiveness estimate would feel natural and is precisely what is
+forbidden — we have no applicant counts. The page states what its numbers are, and an e2e test
+asserts no assertion of chances, odds, readiness or percentile survives on it. That test drops
+NEGATED sentences before matching, because the page deliberately names what it does not do and two
+earlier versions flagged its own disclaimers.
+
+**8. The posting body is rendered as HTML, and that is only safe because the server filters it.**
 `description_html` is third-party content from a board anyone can post to. It is sanitized
 server-side through an allow-list before it is served (see hard rule 29); rendering it here without
 that would be stored XSS.
@@ -90,6 +97,7 @@ always the public page, whoever is looking.
 | `/login`, `/register` | public | Two routes over one form — a browser password manager keys on the URL |
 | `/app/feed` | member | Today's feed with the fit ledger, save/apply, dismiss-with-reason |
 | `/app/saved` | member | Saved roles, each with its current liveness state |
+| `/app/gaps` | member | What your eligible roles ask for that you have not listed |
 | `/app/browse`, `/app/browse/:id` | member | The corpus, filtered and keyset-paginated, plus posting detail |
 | `/app/profile` | member | Preferences, skills, resume upload, account erasure |
 | `/app/settings` | member | Digest consent, quiet hours, caps, minimum band, send history |

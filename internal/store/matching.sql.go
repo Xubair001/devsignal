@@ -432,3 +432,190 @@ func (q *Queries) PutFitScore(ctx context.Context, arg PutFitScoreParams) error 
 	)
 	return err
 }
+
+const skillGapCoverage = `-- name: SkillGapCoverage :one
+SELECT count(DISTINCT o.id)::bigint AS eligible,
+       count(DISTINCT o.id) FILTER (
+           WHERE EXISTS (SELECT 1 FROM opportunity_skill os
+                          WHERE os.opportunity_id = o.id))::bigint AS with_skills
+  FROM eligibility_result er
+  JOIN profile p     ON p.user_id = er.user_id
+                    AND p.profile_version = er.profile_version
+  JOIN opportunity o ON o.id = er.opportunity_id
+ WHERE er.user_id = $1
+   AND er.eligible
+   AND o.pipeline_state = 'ready'
+   AND o.closed_at IS NULL
+   AND o.merged_into IS NULL
+`
+
+type SkillGapCoverageRow struct {
+	Eligible   int64
+	WithSkills int64
+}
+
+// The denominator, without which every count above is unreadable.
+//
+// A posting whose skills were never extracted contributes nothing to the gap
+// analysis, so reporting "23 roles want Kubernetes" out of an unstated total
+// silently understates by however much of the corpus is unenriched. This is the
+// honest denominator: eligible roles, and how many of them we could actually
+// read.
+func (q *Queries) SkillGapCoverage(ctx context.Context, userID pgtype.UUID) (SkillGapCoverageRow, error) {
+	row := q.db.QueryRow(ctx, skillGapCoverage, userID)
+	var i SkillGapCoverageRow
+	err := row.Scan(&i.Eligible, &i.WithSkills)
+	return i, err
+}
+
+const skillGapsForUser = `-- name: SkillGapsForUser :many
+SELECT s.canonical_slug::text AS slug,
+       s.display_name,
+       count(DISTINCT o.id) FILTER (WHERE os.requirement_level = 'required')::bigint
+           AS required_by,
+       count(DISTINCT o.id) FILTER (WHERE os.requirement_level = 'preferred')::bigint
+           AS preferred_by,
+       -- Whether the vocabulary knows this skill. An extraction-invented phrase
+       -- is not advice anyone can act on, so the caller can exclude it.
+       (s.ontology_version LIKE 'seed-%')::boolean AS in_vocabulary
+  FROM eligibility_result er
+  JOIN profile p            ON p.user_id = er.user_id
+                           AND p.profile_version = er.profile_version
+  JOIN opportunity o        ON o.id = er.opportunity_id
+  JOIN opportunity_skill os ON os.opportunity_id = o.id
+  JOIN skill s              ON s.id = os.skill_id
+ WHERE er.user_id = $1
+   AND er.eligible
+   AND o.pipeline_state = 'ready'
+   AND o.closed_at IS NULL
+   AND o.merged_into IS NULL
+   AND os.requirement_level IN ('required', 'preferred')
+   -- The gap is what they do NOT have. Origin is irrelevant: a skill claimed by
+   -- hand and one read off a resume are both "has it".
+   AND NOT EXISTS (
+        SELECT 1 FROM profile_skill ps
+         WHERE ps.user_id = er.user_id AND ps.skill_id = s.id)
+ GROUP BY s.id, s.canonical_slug, s.display_name, s.ontology_version
+ ORDER BY required_by DESC, preferred_by DESC, s.display_name
+ LIMIT $2::int
+`
+
+type SkillGapsForUserParams struct {
+	UserID  pgtype.UUID
+	MaxRows int32
+}
+
+type SkillGapsForUserRow struct {
+	Slug         string
+	DisplayName  string
+	RequiredBy   int64
+	PreferredBy  int64
+	InVocabulary bool
+}
+
+// Which skills the roles this user is eligible for ask for, that they do not have.
+//
+// Question four of the product's four: "what should I learn to be more
+// competitive". Answered here as ARITHMETIC OVER OBSERVED DATA and nothing else
+// — a count of postings, not an estimate of anyone's chances. We have no
+// applicant counts, so there is no competitiveness figure to give and inventing
+// one would discredit the honest numbers beside it (blueprint §3).
+//
+// Scoped to the user's ELIGIBLE set rather than the whole corpus. A skill that
+// half the market wants is useless advice if every posting needing it fails this
+// person's work-authorization or location gate; the only roles worth naming a
+// gap for are the ones they could actually take.
+//
+// TWO things this query has to get right about eligibility_result, both of which
+// it got wrong first:
+//
+//  1. Its primary key is (user_id, opportunity_id, profile_version,
+//     opportunity_version), so it holds one row PER VERSION PAIR. Counting rows
+//     counted 502 "roles" against a 265-posting corpus. Every count is over
+//     DISTINCT opportunities.
+//  2. A result computed against an older profile_version describes a gate the
+//     user no longer has. Restricting to the CURRENT version is what keeps this
+//     an analysis of who they are rather than who they were.
+func (q *Queries) SkillGapsForUser(ctx context.Context, arg SkillGapsForUserParams) ([]SkillGapsForUserRow, error) {
+	rows, err := q.db.Query(ctx, skillGapsForUser, arg.UserID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillGapsForUserRow
+	for rows.Next() {
+		var i SkillGapsForUserRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.DisplayName,
+			&i.RequiredBy,
+			&i.PreferredBy,
+			&i.InVocabulary,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const skillsUserHasInDemand = `-- name: SkillsUserHasInDemand :many
+SELECT s.display_name,
+       count(DISTINCT o.id) FILTER (WHERE os.requirement_level = 'required')::bigint
+           AS required_by
+  FROM profile_skill ps
+  JOIN skill s              ON s.id = ps.skill_id
+  JOIN opportunity_skill os ON os.skill_id = s.id
+  JOIN eligibility_result er ON er.opportunity_id = os.opportunity_id
+  JOIN profile p            ON p.user_id = er.user_id
+                           AND p.profile_version = er.profile_version
+  JOIN opportunity o        ON o.id = er.opportunity_id
+ WHERE ps.user_id = $1
+   AND er.user_id = $1
+   AND er.eligible
+   AND o.pipeline_state = 'ready'
+   AND o.closed_at IS NULL
+   AND o.merged_into IS NULL
+   AND os.requirement_level = 'required'
+ GROUP BY s.id, s.display_name
+ ORDER BY required_by DESC, s.display_name
+ LIMIT $2::int
+`
+
+type SkillsUserHasInDemandParams struct {
+	UserID  pgtype.UUID
+	MaxRows int32
+}
+
+type SkillsUserHasInDemandRow struct {
+	DisplayName string
+	RequiredBy  int64
+}
+
+// The mirror: skills they DO have, and how many eligible roles ask for them.
+//
+// Included because a gap list on its own reads as a deficit report. The same
+// arithmetic run the other way is what makes it a position rather than a verdict,
+// and it costs one query.
+func (q *Queries) SkillsUserHasInDemand(ctx context.Context, arg SkillsUserHasInDemandParams) ([]SkillsUserHasInDemandRow, error) {
+	rows, err := q.db.Query(ctx, skillsUserHasInDemand, arg.UserID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillsUserHasInDemandRow
+	for rows.Next() {
+		var i SkillsUserHasInDemandRow
+		if err := rows.Scan(&i.DisplayName, &i.RequiredBy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

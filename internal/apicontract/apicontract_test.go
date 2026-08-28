@@ -97,6 +97,14 @@ func init() {
 		"items.posting.signals.ghost_risk_reasons",
 	)
 
+	// The gap surface. Its counts are counts of postings, and the two empty
+	// states are named by the server because they have opposite fixes.
+	consumed["gaps"] = paths(reflect.TypeOf(engagement.GapsResponse{}),
+		"state", "eligible", "with_skills", "excluded_unknown_phrases",
+		"gaps.slug", "gaps.name", "gaps.required_by", "gaps.preferred_by",
+		"strengths.name", "strengths.required_by",
+	)
+
 	consumed["excluded"] = paths(reflect.TypeOf(engagement.ExcludedResponse{}),
 		"items.opportunity_id", "items.title", "items.failed_checks", "items.reasons",
 	)

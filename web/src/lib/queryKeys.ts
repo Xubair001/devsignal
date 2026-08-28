@@ -10,6 +10,7 @@ export const qk = {
   feed: (params?: Record<string, unknown>) => ['feed', params ?? {}] as const,
   feedExcluded: () => ['feed', 'excluded'] as const,
   explanation: (id: string) => ['feed', 'explanation', id] as const,
+  gaps: () => ['feed', 'gaps'] as const,
 
   slo: () => ['admin', 'slo'] as const,
   sources: () => ['admin', 'sources'] as const,

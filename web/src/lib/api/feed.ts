@@ -5,9 +5,13 @@ import type {
   ExcludedResponse,
   FeedResponse,
   FitView,
+  SkillGaps,
 } from './types';
 
 export const feedApi = {
+  /** Question four. Counts of postings, never a probability. */
+  gaps: () => http.get<SkillGaps>('/api/v1/feed/gaps'),
+
   /** The closed set of dismissal reasons, from the server that owns it. */
   dismissReasons: () => http.get<ChoicesResponse>('/api/v1/engagement/dismiss-reasons'),
 

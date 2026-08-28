@@ -55,6 +55,7 @@ async function expectNoHorizontalOverflow(page: Page, where: string) {
 const ROUTES = [
   '/app/feed',
   '/app/saved',
+  '/app/gaps',
   '/app/browse',
   '/app/profile',
   '/app/settings',
@@ -123,5 +124,77 @@ test.describe('console', () => {
       await burger.click();
       await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
     }
+  });
+});
+
+test.describe('the gap surface renders no forbidden claim', () => {
+  test.skip(TOKEN === null, 'web/.env.local has no VITE_DEV_TOKEN');
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(
+      ([key, value]) => {
+        window.localStorage.setItem(key, value);
+      },
+      ['ds-token', TOKEN!] as const,
+    );
+  });
+
+  /**
+   * The display rule as a test.
+   *
+   * This page answers "what should I learn", which is exactly where a
+   * competitiveness estimate would feel natural and is exactly what blueprint §3
+   * forbids: we have no applicant counts. A percentage on this screen would be an
+   * invented probability, and the whole surface is arithmetic precisely to avoid
+   * one.
+   */
+  test('no percentage, no readiness score, no probability language', async ({ page }) => {
+    await page.goto('/app/gaps');
+    await page.waitForLoadState('networkidle');
+
+    const text = await page.locator('main').innerText();
+
+    /* Negated sentences are dropped before matching.
+       This page deliberately NAMES what it does not do — "no readiness score",
+       "not an estimate of your chances" — and that copy is the point, not a
+       violation. Two earlier versions of this test flagged the page's own
+       disclaimers. An assertion inside a negation is a disclaimer; only what
+       survives the filter is a claim. */
+    const asserted = text
+      .split(/(?<=[.!?])\s+|\n+/)
+      .filter((sentence) => !/\b(no|not|never|without|nor|cannot)\b/i.test(sentence))
+      .join(' ');
+
+    /* Matches ASSERTIONS, not the words. An earlier version of this regex
+       flagged the page's own disclaimer — "not an estimate of your chances" —
+       which is exactly the copy we want. The forbidden thing is a quantified or
+       asserted claim, so the patterns require a verb or a number. */
+    const forbidden: [RegExp, string][] = [
+      [/(increase|improve|boost|raise|lift)\w*\s+your\s+(chances?|odds)/i,
+        'claims an action changes the reader\'s chances'],
+      [/your\s+(chances?|odds)\s+(are|is|of|at)\b/i, 'asserts what the chances are'],
+      [/\d+\s*%\s*(match|fit|chance|likely|readiness|competitive)/i,
+        'attaches a percentage to a match or a chance'],
+      [/\d+(\.\d+)?\s*%\s*more likely/i, 'quantifies a likelihood'],
+      [/\breadiness score\b/i, 'invents a readiness score'],
+      [/\bcompetitiveness (score|estimate|rating)\b/i, 'invents a competitiveness figure'],
+      [/\b\d+(st|nd|rd|th) percentile\b/i, 'shows a percentile before calibration exists'],
+    ];
+
+    for (const [pattern, why] of forbidden) {
+      expect(asserted, `the gap page ${why}: ${pattern}`).not.toMatch(pattern);
+    }
+
+    /* The more valuable half: the page must SAY what its numbers are. A surface
+       that merely avoids the forbidden phrasing while leaving the reader to
+       assume a probability has kept the letter and lost the point. */
+    expect(
+      text.toLowerCase(),
+      'the page does not tell the reader the numbers are counts of postings',
+    ).toContain('count');
+    expect(
+      text.toLowerCase(),
+      'the page does not disclaim being an estimate of the reader\'s chances',
+    ).toMatch(/not an estimate|no applicant counts/);
   });
 });

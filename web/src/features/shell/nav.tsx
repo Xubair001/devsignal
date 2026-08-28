@@ -57,6 +57,15 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        to: '/app/gaps',
+        label: 'What you are missing',
+        icon: (
+          <I>
+            <path d="M4 19V9M10 19V5M16 19v-7M20 19H3" />
+          </I>
+        ),
+      },
+      {
         to: '/app/browse',
         label: 'Corpus',
         icon: (
